@@ -43,9 +43,14 @@ class ExportCommand:
             for key, value in Security.all_decrypted_values().items():
                 self._notify(f"{key}: {value}")
             if Security.private_keys():
-                self._notify("\nEthereum wallets:")
+                self._notify("\nEthereum & Solana wallets:")
             for key, value in Security.private_keys().items():
-                self._notify(f"Public address: {key}\nPrivate Key: {value.hex()}")
+                chain = "unknown"
+                if global_config_map["solana_wallet"].value == key:
+                    chain = "Solana"
+                elif global_config_map["ethereum_wallet"].value == key:
+                    chain = "Ethereum"
+                self._notify(f"({chain}) Public address: {key}\nPrivate Key: {value.hex()}")
         self.app.change_prompt(prompt=">>> ")
         self.app.hide_input = False
         self.placeholder_mode = False

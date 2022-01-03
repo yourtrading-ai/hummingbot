@@ -5,6 +5,8 @@ Functions for storing encrypted wallets and decrypting stored wallets.
 """
 
 from eth_account import Account
+from solana.keypair import Keypair
+
 from hummingbot.client.settings import (
     KEYFILE_PREFIX,
     KEYFILE_POSTFIX,
@@ -18,6 +20,7 @@ from os.path import (
     isfile
 )
 from typing import Dict, List
+import base58
 
 
 def get_key_file_path() -> str:
@@ -30,15 +33,15 @@ def get_key_file_path() -> str:
     return path if path is not None else DEFAULT_KEY_FILE_PATH
 
 
-def import_and_save_wallet(password: str, private_key: str) -> Account:
+def import_and_save_eth_wallet(password: str, private_key: str) -> Account:
     """
-    Create an account for a private key, then encryt the private key and store it in the path from get_key_file_path()
+    Create an account from a private key, then encrypt the private key and store it in the path from get_key_file_path()
     """
-    acct: Account = Account.privateKeyToAccount(private_key)
-    return save_wallet(acct, password)
+    acct: Account = Account.from_key(private_key)
+    return save_eth_wallet(acct, password)
 
 
-def save_wallet(acct: Account, password: str) -> Account:
+def save_eth_wallet(acct: Account, password: str) -> Account:
     """
     For a given account and password, encrypt the account address and store it in the path from get_key_file_path()
     """
@@ -49,7 +52,26 @@ def save_wallet(acct: Account, password: str) -> Account:
     return acct
 
 
-def unlock_wallet(public_key: str, password: str) -> str:
+def import_and_save_sol_wallet(password: str, secret_key: str) -> Keypair:
+    """
+    Create an keypair from a 64-byte secret key, then encrypt the private key and store it in the path from get_key_file_path()
+    """
+    acct: Keypair = Keypair.from_secret_key(base58.b58decode(secret_key))
+    return save_sol_wallet(acct, password)
+
+
+def save_sol_wallet(acct: Keypair, password: str) -> Keypair:
+    """
+    For a given account and password, encrypt the account address and store it in the path from get_key_file_path()
+    """
+    encrypted: Dict = Account.encrypt(acct.seed, password)
+    file_path: str = "%s%s%s%s" % (get_key_file_path(), KEYFILE_PREFIX, acct.public_key.to_base58().decode('ascii'), KEYFILE_POSTFIX)
+    with open(file_path, 'w+') as f:
+        f.write(json.dumps(encrypted))
+    return acct
+
+
+def decrypt_wallet(public_key: str, password: str) -> str:
     """
     Search get_key_file_path() by a public key for an account file, then decrypt the private key from the file with the
     provided password

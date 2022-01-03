@@ -20,6 +20,8 @@ from typing import (
 from os import listdir
 import shutil
 
+from solana.keypair import Keypair
+
 from hummingbot.client.config.config_var import ConfigVar
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.config.fee_overrides_config_map import fee_overrides_config_map
@@ -157,8 +159,17 @@ def get_eth_wallet_private_key() -> Optional[str]:
     if ethereum_wallet is None or ethereum_wallet == "":
         return None
     private_key = Security._private_keys[ethereum_wallet]
-    account = Account.privateKeyToAccount(private_key)
+    account = Account.from_key(private_key)
     return account.privateKey.hex()
+
+
+def get_sol_wallet_private_key() -> Optional[str]:
+    solana_wallet = global_config_map.get("solana_wallet").value
+    if solana_wallet is None or solana_wallet == "":
+        return None
+    secret_key = Security._private_keys[solana_wallet]
+    keypair = Keypair.from_secret_key(secret_key)
+    return keypair.secret_key.decode('ascii')
 
 
 def _merge_dicts(*args: Dict[str, ConfigVar]) -> OrderedDict:

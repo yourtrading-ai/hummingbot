@@ -147,6 +147,34 @@ main_config_map = {
                   type_str="str",
                   required_if=lambda: global_config_map["ethereum_wallet"].value is not None,
                   default="https://defi.cmc.eth.link/"),
+    "solana_wallet":
+        ConfigVar(key="solana_wallet",
+                  prompt="Enter your wallet private key >>> ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  is_connect_key=True),
+    "solana_rpc_url":
+        ConfigVar(key="solana_rpc_url",
+                  prompt="Which Solana RPC API would you like your client to connect to? >>> ",
+                  required_if=lambda: False,
+                  default="https://api.mainnet-beta.solana.com"),
+    "solana_rpc_ws_url":
+        ConfigVar(key="solana_rpc_ws_url",
+                  prompt="Enter the Websocket Address of your Solana RPC Node >>> ",
+                  required_if=lambda: False),
+    "solana_chain_name":
+        ConfigVar(key="solana_chain_name",
+                  prompt="What is your preferred Solana chain name (mainnet-beta, testnet, devnet)? >>> ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=lambda s: None if s in {"mainnet-beta", "testnet", "devnet"} else "Invalid chain name.",
+                  default="mainnet-beta"),
+    "solana_token_list_url":
+        ConfigVar(key="solana_token_list_url",
+                  prompt="Specify token list url, if different from default >>> ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  default="https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json"),
     "kill_switch_enabled":
         ConfigVar(key="kill_switch_enabled",
                   prompt="Would you like to enable the kill switch? (Yes/No) >>> ",

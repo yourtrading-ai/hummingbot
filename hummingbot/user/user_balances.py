@@ -1,3 +1,5 @@
+from solana.publickey import PublicKey
+
 from hummingbot.core.utils.market_price import get_last_price
 from hummingbot.client.settings import AllConnectorSettings
 from hummingbot.client.config.security import Security
@@ -11,6 +13,7 @@ from typing import Optional, Dict, List
 from decimal import Decimal
 
 from web3 import Web3
+from solana.rpc.api import Client
 
 
 class UserBalances:
@@ -107,9 +110,9 @@ class UserBalances:
     def ethereum_balance() -> Decimal:
         ethereum_wallet = global_config_map.get("ethereum_wallet").value
         ethereum_rpc_url = global_config_map.get("ethereum_rpc_url").value
-        web3 = Web3(Web3.HTTPProvider(ethereum_rpc_url))
-        balance = web3.eth.getBalance(ethereum_wallet)
-        balance = web3.fromWei(balance, "ether")
+        eth_client = Web3(Web3.HTTPProvider(ethereum_rpc_url))
+        balance = eth_client.eth.getBalance(ethereum_wallet)
+        balance = eth_client.fromWei(balance, "ether")
         return balance
 
     @staticmethod
@@ -144,6 +147,28 @@ class UserBalances:
             return "Ethereum private key file does not exist or corrupts."
         try:
             UserBalances.ethereum_balance()
+        except Exception as e:
+            return str(e)
+        return None
+
+    @staticmethod
+    def solana_balance() -> Decimal:
+        public_key = global_config_map.get("solana_wallet").value
+        solana_rpc_url = global_config_map.get("solana_rpc_url").value
+        solana_client = Client(solana_rpc_url)
+        balance = solana_client.get_balance(PublicKey(public_key))["result"]["value"] * 1e-9
+        return balance
+
+    @staticmethod
+    def validate_solana_wallet() -> Optional[str]:
+        if global_config_map.get("solana_wallet").value is None:
+            return "Solana wallet is required."
+        if global_config_map.get("solana_rpc_url").value is None:
+            return "solana_rpc_url is required."
+        if global_config_map.get("solana_wallet").value not in Security.private_keys():
+            return "Solana private key file does not exist or corrupts."
+        try:
+            UserBalances.solana_balance()
         except Exception as e:
             return str(e)
         return None

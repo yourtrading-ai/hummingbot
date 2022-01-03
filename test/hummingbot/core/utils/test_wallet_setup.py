@@ -5,7 +5,7 @@ Unit tests for hummingbot.core.utils.wallet_setup
 from eth_account import Account
 from hummingbot.client.settings import DEFAULT_KEY_FILE_PATH, KEYFILE_PREFIX, KEYFILE_POSTFIX
 from hummingbot.client.config.global_config_map import global_config_map
-from hummingbot.core.utils.wallet_setup import get_key_file_path, list_wallets, import_and_save_wallet, save_wallet
+from hummingbot.core.utils.wallet_setup import get_key_file_path, list_wallets, import_and_save_eth_wallet, save_eth_wallet
 import os
 import tempfile
 import unittest.mock
@@ -36,7 +36,7 @@ class WalletSetupTest(unittest.TestCase):
         acct = Account.privateKeyToAccount(private_key)
 
         # there is no check on the format of the password in save_wallet
-        save_wallet(acct, "topsecret")
+        save_eth_wallet(acct, "topsecret")
         file_path = "%s%s%s%s" % (get_key_file_path(), KEYFILE_PREFIX, acct.address, KEYFILE_POSTFIX)
         self.assertEqual(os.path.exists(file_path), True)
 
@@ -52,15 +52,15 @@ class WalletSetupTest(unittest.TestCase):
         password = "topsecret"
 
         ill_formed_private_key1 = "not_hex"
-        self.assertRaisesRegex(ValueError, "^when sending a str, it must be a hex string", import_and_save_wallet, password, ill_formed_private_key1)
+        self.assertRaisesRegex(ValueError, "^when sending a str, it must be a hex string", import_and_save_eth_wallet, password, ill_formed_private_key1)
 
         ill_formed_private_key2 = "0x123123123"  # not the expected length
-        self.assertRaisesRegex(ValueError, "^The private key must be exactly 32 bytes long", import_and_save_wallet, password, ill_formed_private_key2)
+        self.assertRaisesRegex(ValueError, "^The private key must be exactly 32 bytes long", import_and_save_eth_wallet, password, ill_formed_private_key2)
 
         # this private key must be in the correct format or it will fail
         private_key = "0x8da4ef21b864d2cc526dbdb2a120bd2874c36c9d0a1fb7f8c63d7f7a8b41de8f"
         password = "topsecret"
-        acct = import_and_save_wallet(password, private_key)
+        acct = import_and_save_eth_wallet(password, private_key)
         file_path = "%s%s%s%s" % (get_key_file_path(), KEYFILE_PREFIX, acct.address, KEYFILE_POSTFIX)
         self.assertEqual(os.path.exists(file_path), True)
 
@@ -80,18 +80,18 @@ class WalletSetupTest(unittest.TestCase):
         # make one wallet
         private_key = "0x8da4ef21b864d2cc526dbdb2a120bd2874c36c9d0a1fb7f8c63d7f7a8b41de8f"
         password = "topsecret"
-        import_and_save_wallet(password, private_key)
+        import_and_save_eth_wallet(password, private_key)
 
         self.assertEqual(len(list_wallets()), 1)
 
         # reimporting an existing wallet should not change the count
-        import_and_save_wallet(password, private_key)
+        import_and_save_eth_wallet(password, private_key)
 
         self.assertEqual(len(list_wallets()), 1)
 
         # make a second wallet
         private_key2 = "0xaaaaaf21b864d2cc526dbdb2a120bd2874c36c9d0a1fb7f8c63d7f7a8b41eeee"
         password2 = "topsecrettopsecret"
-        import_and_save_wallet(password2, private_key2)
+        import_and_save_eth_wallet(password2, private_key2)
 
         self.assertEqual(len(list_wallets()), 2)

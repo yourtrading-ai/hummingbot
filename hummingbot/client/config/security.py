@@ -8,8 +8,8 @@ from hummingbot.client.config.config_crypt import (
 )
 from hummingbot.core.utils.wallet_setup import (
     list_wallets,
-    unlock_wallet,
-    import_and_save_wallet
+    decrypt_wallet,
+    import_and_save_eth_wallet, import_and_save_sol_wallet
 )
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.settings import AllConnectorSettings
@@ -17,6 +17,12 @@ from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.core.utils.async_call_scheduler import AsyncCallScheduler
 import asyncio
 from os import unlink
+from enum import Enum
+
+
+class WalletType(Enum):
+    ETHEREUM = 1
+    SOLANA = 2
 
 
 class Security:
@@ -58,7 +64,7 @@ class Security:
                 raise err
         elif wallets:
             try:
-                unlock_wallet(wallets[0], password)
+                decrypt_wallet(wallets[0], password)
             except ValueError as err:
                 if str(err) == "MAC mismatch":
                     return False
@@ -76,7 +82,7 @@ class Security:
     @classmethod
     def unlock_wallet(cls, public_key):
         if public_key not in cls._private_keys:
-            cls._private_keys[public_key] = unlock_wallet(public_key=public_key, password=Security.password)
+            cls._private_keys[public_key] = decrypt_wallet(public_key=public_key, password=Security.password)
         return cls._private_keys[public_key]
 
     @classmethod
@@ -102,11 +108,18 @@ class Security:
         cls._secure_configs[key] = new_value
 
     @classmethod
-    def add_private_key(cls, private_key) -> str:
+    def add_private_key(cls, private_key, wallet_type: WalletType = WalletType.ETHEREUM) -> str:
         # Add private key and return public key
-        account = import_and_save_wallet(cls.password, private_key)
-        cls._private_keys[account.address] = account.privateKey
-        return account.address
+        if wallet_type == WalletType.ETHEREUM:
+            account = import_and_save_eth_wallet(cls.password, private_key)
+            cls._private_keys[account.address] = account.privateKey
+            return account.address
+        elif wallet_type == WalletType.SOLANA:
+            keypair = import_and_save_sol_wallet(cls.password, private_key)
+            cls._private_keys[keypair.public_key.to_base58().decode('ascii')] = keypair.secret_key
+            return keypair.public_key.to_base58().decode('ascii')
+        else:
+            raise Exception("Invalid WalletType, choose ETHEREUM or SOLANA.")
 
     @classmethod
     def update_config_map(cls, config_map):
