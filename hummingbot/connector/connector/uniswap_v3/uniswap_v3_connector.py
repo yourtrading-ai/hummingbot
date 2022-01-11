@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from hummingbot.core.utils import async_ttl_cache
 from hummingbot.connector.ethereum_base import EthereumBase
-from hummingbot.connector.gateway_in_flight_order import GatewayInFlightOrder
+from hummingbot.connector.ethereum_in_flight_order import EthereumInFlightOrder
 from hummingbot.connector.connector.uniswap_v3.uniswap_v3_in_flight_position import UniswapV3InFlightPosition, UniswapV3PositionStatus
 from hummingbot.core.event.events import (
     MarketEvent,
@@ -129,7 +129,7 @@ class UniswapV3Connector(EthereumBase):
                 amount1 = Decimal(event["value"]) / 10 ** quote_decimals
         return token_id, amount0, amount1
 
-    async def update_swap_order(self, update_result: Dict[str, any], tracked_order: GatewayInFlightOrder):
+    async def update_swap_order(self, update_result: Dict[str, any], tracked_order: EthereumInFlightOrder):
         if update_result.get("confirmed", False):
             if update_result["receipt"].get("status", 0) == 1:
                 order_id = await tracked_order.get_exchange_order_id()
@@ -290,7 +290,7 @@ class UniswapV3Connector(EthereumBase):
                 if "txHash" not in update_result:
                     self.logger().info(f"Update_order_status txHash not in resp: {update_result}")
                     continue
-                if isinstance(tracked_item, GatewayInFlightOrder):
+                if isinstance(tracked_item, EthereumInFlightOrder):
                     await self.update_swap_order(update_result, tracked_item)
                 else:
                     await self.update_lp_order(update_result, tracked_item)

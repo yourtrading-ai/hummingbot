@@ -4,6 +4,7 @@ from typing import (
     Any,
     Optional,
 )
+
 from hummingbot.core.event.events import (
     OrderType,
     TradeType
@@ -11,7 +12,7 @@ from hummingbot.core.event.events import (
 from hummingbot.connector.in_flight_order_base import InFlightOrderBase
 
 
-class GatewayInFlightOrder(InFlightOrderBase):
+class EthereumInFlightOrder(InFlightOrderBase):
     def __init__(self,
                  client_order_id: str,
                  exchange_order_id: Optional[str],
@@ -42,7 +43,7 @@ class GatewayInFlightOrder(InFlightOrderBase):
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> InFlightOrderBase:
-        retval = GatewayInFlightOrder(
+        retval = EthereumInFlightOrder(
             client_order_id=data["client_order_id"],
             exchange_order_id=data["exchange_order_id"],
             trading_pair=data["trading_pair"],

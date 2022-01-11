@@ -9,15 +9,11 @@ from typing import Dict, Any, List
 
 import aiohttp
 from hummingbot.connector.connector_base import ConnectorBase, global_config_map
+from hummingbot.connector.in_flight_order_base import InFlightOrderBase
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.network_iterator import NetworkStatus
 
 from hummingbot.client.settings import GATEAWAY_CA_CERT_PATH, GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH
-from hummingbot.connector.gateway_in_flight_order import GatewayInFlightOrder
-from hummingbot.core.event.events import (
-    OrderType,
-    TradeType,
-)
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.logger import HummingbotLogger
 from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
@@ -99,8 +95,11 @@ class GatewayBase(ConnectorBase):
     def ready(self):
         raise NotImplementedError
 
+    async def get_gateway_status(self):
+        return await self._api_request('get', '')
+
     @property
-    def amm_orders(self) -> List[GatewayInFlightOrder]:
+    def amm_orders(self) -> List[InFlightOrderBase]:
         return [
             in_flight_order
             for in_flight_order in self._in_flight_orders.values() if
@@ -131,28 +130,11 @@ class GatewayBase(ConnectorBase):
                 app_warning_msg=str(e)
             )
 
-    def start_tracking_order(self,
-                             order_id: str,
-                             exchange_order_id: str = None,
-                             trading_pair: str = "",
-                             order_type: OrderType = OrderType.LIMIT,
-                             trade_type: TradeType = TradeType.BUY,
-                             price: Decimal = s_decimal_0,
-                             amount: Decimal = s_decimal_0,
-                             gas_price: Decimal = s_decimal_0):
+    def start_tracking_order(self, *args, **kwargs):
         """
         Starts tracking an order by simply adding it into _in_flight_orders dictionary.
         """
-        self._in_flight_orders[order_id] = GatewayInFlightOrder(
-            client_order_id=order_id,
-            exchange_order_id=exchange_order_id,
-            trading_pair=trading_pair,
-            order_type=order_type,
-            trade_type=trade_type,
-            price=price,
-            amount=amount,
-            gas_price=gas_price
-        )
+        raise NotImplementedError
 
     def stop_tracking_order(self, order_id: str):
         """
@@ -292,5 +274,5 @@ class GatewayBase(ConnectorBase):
         return parsed_response
 
     @property
-    def in_flight_orders(self) -> Dict[str, GatewayInFlightOrder]:
+    def in_flight_orders(self) -> Dict[str, InFlightOrderBase]:
         return self._in_flight_orders
