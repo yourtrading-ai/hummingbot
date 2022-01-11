@@ -104,7 +104,8 @@ class HummingbotApplication(*commands):
         self._gateway_monitor: Optional[GatewayBase] = None
         self._gateway_monitor_clock: Optional[Clock] = None
         self._init_gateway_monitor()
-        self._gateway_monitor_task: asyncio.Task = safe_ensure_future(self._run_gateway_monitor_clock(), loop=self.ev_loop)
+        self._gateway_monitor_task: asyncio.Task = safe_ensure_future(self._run_gateway_monitor_clock(),
+                                                                      loop=self.ev_loop)
         # A list of gateway configuration key for auto-complete on gateway config command
         self.gateway_config_keys: List[str] = []
         safe_ensure_future(self.fetch_gateway_config_key_list(), loop=self.ev_loop)
@@ -141,9 +142,7 @@ class HummingbotApplication(*commands):
         return None
 
     def _init_gateway_monitor(self):
-        self._gateway_monitor = GatewayBase(trading_pairs = [],
-                                            trading_required = False
-                                            )
+        self._gateway_monitor = GatewayBase(trading_pairs=[], trading_required=False)
         self._gateway_monitor_clock = Clock(ClockMode.REALTIME)
         self._gateway_monitor_clock.add_iterator(self._gateway_monitor)
 

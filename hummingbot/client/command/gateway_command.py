@@ -5,7 +5,6 @@ import ssl
 import json
 import shutil
 import ruamel.yaml
-import pandas as pd
 from os import listdir, path
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.core.utils.async_utils import safe_ensure_future
@@ -182,7 +181,7 @@ class GatewayCommand:
         if self._gateway_monitor.network_status == NetworkStatus.CONNECTED:
             try:
                 status = await self._gateway_monitor.get_gateway_status()
-                self._notify(pd.DataFrame(status))
+                self._notify(f"Status: {status['status']}")
             except Exception:
                 self._notify("\nError: Unable to fetch status of connected Gateway server.")
         else:
