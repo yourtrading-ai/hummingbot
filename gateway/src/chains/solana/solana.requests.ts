@@ -3,7 +3,7 @@ import { TransactionResponse } from '@solana/web3.js';
 export type SolanaTransactionResponse = TransactionResponse;
 
 export interface SolanaBalanceRequest {
-  privateKey: string; // the users private Solana key in Base58
+  address: string; // the user's Solana public key as Base58
   tokenSymbols: string[]; // a list of token symbol
 }
 
@@ -14,13 +14,9 @@ export interface SolanaBalanceResponse {
   balances: Record<string, string>; // the balance should be a string encoded number
 }
 
-export interface PostSolanaTokenRequest {
+export interface SolanaTokenRequest {
+  address: string; // the user's Solana public key as Base58
   token: string; // the token symbol the spender will be approved for
-  privateKey: string; // the user's private Solana key
-}
-export interface GetSolanaTokenRequest {
-  token: string; // the token symbol the spender will be approved for
-  publicKey: string; // the user's public Solana key
 }
 
 export interface SolanaTokenResponse {

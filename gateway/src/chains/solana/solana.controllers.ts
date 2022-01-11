@@ -5,27 +5,38 @@ import {
   SolanaBalanceResponse,
   SolanaPollRequest,
   SolanaPollResponse,
-  GetSolanaTokenRequest,
+  SolanaTokenRequest,
   SolanaTokenResponse,
-  PostSolanaTokenRequest,
 } from './solana.requests';
 import { Solanaish } from './solana';
 import { PublicKey } from '@solana/web3.js';
-import { HttpException } from '../../services/error-handler';
+import {
+  HttpException,
+  TOKEN_NOT_SUPPORTED_ERROR_CODE,
+  TOKEN_NOT_SUPPORTED_ERROR_MESSAGE,
+} from '../../services/error-handler';
 
 export async function balances(
   solanaish: Solanaish,
   req: SolanaBalanceRequest
 ): Promise<SolanaBalanceResponse | string> {
   const initTime = Date.now();
-  const wallet = solanaish.getKeypairFromPrivateKey(req.privateKey);
+  const wallet = await solanaish.getKeypair(req.address);
   const balances = await solanaish.getBalances(wallet);
+  const filteredBalances = toSolanaBalances(balances, req.tokenSymbols);
+  if (Object.keys(filteredBalances).length === 0) {
+    throw new HttpException(
+      500,
+      TOKEN_NOT_SUPPORTED_ERROR_MESSAGE + req.tokenSymbols,
+      TOKEN_NOT_SUPPORTED_ERROR_CODE
+    );
+  }
 
   return {
     network: solanaish.cluster,
     timestamp: initTime,
     latency: latency(initTime, Date.now()),
-    balances: toSolanaBalances(balances, req.tokenSymbols),
+    balances: filteredBalances,
   };
 }
 
@@ -66,15 +77,19 @@ export async function poll(
 
 export async function token(
   solanaish: Solanaish,
-  req: GetSolanaTokenRequest
+  req: SolanaTokenRequest
 ): Promise<SolanaTokenResponse> {
   const initTime = Date.now();
   const tokenInfo = solanaish.getTokenForSymbol(req.token);
   if (!tokenInfo) {
-    throw new HttpException(501, 'Token not found');
+    throw new HttpException(
+      500,
+      TOKEN_NOT_SUPPORTED_ERROR_MESSAGE + req.token,
+      TOKEN_NOT_SUPPORTED_ERROR_CODE
+    );
   }
 
-  const walletAddress = new PublicKey(req.publicKey);
+  const walletAddress = new PublicKey(req.address);
   const mintAddress = new PublicKey(tokenInfo.address);
   const account = await solanaish.getTokenAccount(walletAddress, mintAddress);
 
@@ -99,15 +114,18 @@ export async function token(
 
 export async function getOrCreateTokenAccount(
   solanaish: Solanaish,
-  req: PostSolanaTokenRequest
+  req: SolanaTokenRequest
 ): Promise<SolanaTokenResponse> {
   const initTime = Date.now();
   const tokenInfo = solanaish.getTokenForSymbol(req.token);
   if (!tokenInfo) {
-    throw new HttpException(501, 'Token not found');
+    throw new HttpException(
+      500,
+      TOKEN_NOT_SUPPORTED_ERROR_MESSAGE + req.token,
+      TOKEN_NOT_SUPPORTED_ERROR_CODE
+    );
   }
-
-  const wallet = solanaish.getKeypairFromPrivateKey(req.privateKey);
+  const wallet = await solanaish.getKeypair(req.address);
   const mintAddress = new PublicKey(tokenInfo.address);
   const account = await solanaish.getOrCreateAssociatedTokenAccount(
     wallet,
@@ -116,9 +134,8 @@ export async function getOrCreateTokenAccount(
 
   let amount;
   try {
-    amount = tokenValueToString(
-      await solanaish.getSplBalance(wallet.publicKey, mintAddress)
-    );
+    const a = await solanaish.getSplBalance(wallet.publicKey, mintAddress);
+    amount = tokenValueToString(a);
   } catch (err) {
     amount = undefined;
   }

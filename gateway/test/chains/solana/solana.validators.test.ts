@@ -1,8 +1,5 @@
 import {
-  isPrivateKey,
   isPublicKey,
-  validatePrivateKey,
-  invalidPrivateKeyError,
   validatePublicKey,
   invalidPublicKeyError,
 } from '../../../src/chains/solana/solana.validators';
@@ -27,51 +24,11 @@ describe('isPublicKey', () => {
   });
 });
 
-describe('isPrivateKey', () => {
-  it('pass against a well formed private key', () => {
-    expect(isPrivateKey(privateKey)).toEqual(true);
-  });
-
-  it('fail against a string that is too short', () => {
-    expect(isPrivateKey(privateKey.substring(2))).toEqual(false);
-  });
-
-  it('fail against a string that is too long', () => {
-    expect(isPrivateKey(privateKey + 1)).toEqual(false);
-  });
-});
-
-describe('validatePrivateKey', () => {
-  it('valid when req.privateKey is a privateKey', () => {
-    expect(
-      validatePrivateKey({
-        privateKey,
-      })
-    ).toEqual([]);
-  });
-
-  it('return error when req.privateKey does not exist', () => {
-    expect(
-      validatePrivateKey({
-        hello: 'world',
-      })
-    ).toEqual([missingParameter('privateKey')]);
-  });
-
-  it('return error when req.privateKey is invalid', () => {
-    expect(
-      validatePrivateKey({
-        privateKey: 'world',
-      })
-    ).toEqual([invalidPrivateKeyError]);
-  });
-});
-
 describe('validatePublicKey', () => {
   it('valid when req.publicKey is a publicKey', () => {
     expect(
       validatePublicKey({
-        publicKey,
+        address: publicKey,
       })
     ).toEqual([]);
   });
@@ -81,13 +38,13 @@ describe('validatePublicKey', () => {
       validatePublicKey({
         hello: 'world',
       })
-    ).toEqual([missingParameter('publicKey')]);
+    ).toEqual([missingParameter('address')]);
   });
 
   it('return error when req.publicKey is invalid', () => {
     expect(
       validatePublicKey({
-        publicKey: 'world',
+        address: 'world',
       })
     ).toEqual([invalidPublicKeyError]);
   });

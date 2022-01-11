@@ -16,8 +16,7 @@ import {
   SolanaPollRequest,
   SolanaPollResponse,
   SolanaTokenResponse,
-  GetSolanaTokenRequest,
-  PostSolanaTokenRequest,
+  SolanaTokenRequest,
 } from './solana.requests';
 import {
   validateSolanaGetTokenRequest,
@@ -51,7 +50,7 @@ export namespace SolanaRoutes {
 
   // Get all token accounts and balances + solana balance
   router.post(
-    '/balance',
+    '/balances',
     asyncHandler(
       async (
         req: Request<{}, {}, SolanaBalanceRequest>,
@@ -69,7 +68,7 @@ export namespace SolanaRoutes {
     '/token',
     asyncHandler(
       async (
-        req: Request<{}, {}, GetSolanaTokenRequest>,
+        req: Request<{}, {}, SolanaTokenRequest>,
         res: Response<SolanaTokenResponse | string, {}>,
         _next: NextFunction
       ) => {
@@ -79,16 +78,17 @@ export namespace SolanaRoutes {
     )
   );
 
+  // Creates a new associated token account, if not existent
   router.post(
     '/token',
     asyncHandler(
       async (
-        req: Request<{}, {}, PostSolanaTokenRequest>,
+        req: Request<{}, {}, SolanaTokenRequest>,
         res: Response<SolanaTokenResponse | string, {}>,
         _next: NextFunction
       ) => {
         validateSolanaPostTokenRequest(req.body);
-        res.status(200).json(await getOrCreateTokenAccount(solana, req.body)); // TODO: Controller
+        res.status(200).json(await getOrCreateTokenAccount(solana, req.body));
       }
     )
   );
