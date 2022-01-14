@@ -1,0 +1,12 @@
+# how much the execution price is allowed to move unfavorably from the trade
+# execution price. It uses a rational number for precision.
+allowedSlippage: '2/100'
+
+# the maximum gas allowed for a uniswap trade.
+groupName: 'mainnet.1'
+
+# After how long a transaction times out
+ttl: 10
+
+# allows defining the exact mango account address, in case the user owns multiple mango accounts
+defaultMangoAccount:
