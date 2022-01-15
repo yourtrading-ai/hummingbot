@@ -1,6 +1,4 @@
 import {
-  //BookSide,
-  //BookSideLayout,
   Config,
   getAllMarkets,
   getMarketByBaseSymbolAndKind,
@@ -15,10 +13,8 @@ import {
   MangoClient,
   MangoGroup,
   MarketConfig,
-  MarketKind,
   PerpMarket,
   PerpMarketLayout,
-  //PerpOrder,
   //QUOTE_INDEX,
   TokenInfo,
 } from '@blockworks-foundation/mango-client';
@@ -65,7 +61,7 @@ class Mango {
     );
   }
 
-  /// public
+  /// initialization
 
   public static getInstance(): Mango {
     if (!Mango._instance) {
@@ -130,23 +126,25 @@ class Mango {
     }
   }
 
-  public async fetchMarket(
-    baseSymbol: string,
-    marketKind: MarketKind
-  ): Promise<Market | PerpMarket> {
-    const marketConfig = getMarketByBaseSymbolAndKind(
-      this.mangoGroupConfig,
-      baseSymbol,
-      marketKind
-    );
+  private getMarketConfigByName(marketName: string): MarketConfig {
+    const s = marketName.split('-');
+    if (s[1] == 'PERP') {
+      return getMarketByBaseSymbolAndKind(this.mangoGroupConfig, s[0], 'perp');
+    } else {
+      return getMarketByBaseSymbolAndKind(this.mangoGroupConfig, s[0], 'spot');
+    }
+  }
+
+  public async fetchMarket(marketName: string): Promise<Market | PerpMarket> {
+    const marketConfig = this.getMarketConfigByName(marketName);
     const marketAccountInfo = await this.solana.connection.getAccountInfo(
       marketConfig.publicKey
     );
-    if (marketAccountInfo)
+    if (marketAccountInfo && marketConfig)
       return this.configToMarket(marketConfig, marketAccountInfo);
     else
       throw new Error(
-        `Error retrieving AccountInfo for Mango ${marketKind} market ${baseSymbol}`
+        `Error retrieving AccountInfo for Mango market ${marketName}`
       );
   }
 
@@ -202,19 +200,14 @@ class Mango {
   }
 
   /**
-  public async fetchOrderbook(
-
-  )
-
   public async fetchAllBidsAndAsks(
     mangoAccount: MangoAccount,
     marketName?: string
-  ): Promise<OrderInfo[][]> {
+  ): Promise<OrderBook[]> {
     await mangoAccount.loadOpenOrders(
       this.solana.connection,
       new PublicKey(this.mangoGroupConfig.serumProgramId)
     );
-
     let allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
     let allMarketPks = allMarketConfigs.map((m) => m.publicKey);
 
@@ -240,7 +233,7 @@ class Mango {
       }
     );
 
-    const markets = await this.fetchMarket(marketName, );
+    const markets = await this.fetchAllMarkets();
 
     return Object.entries(markets).map(([address, market]) => {
       const marketConfig = getMarketByPublicKey(this.mangoGroupConfig, address);
@@ -248,15 +241,13 @@ class Mango {
         return this.parseSpotOrders(
           market,
           marketConfig,
-          accountInfos,
-          filterForMangoAccount ? this.mangoAccount : undefined
+          accountInfos
         );
       } else if (market instanceof PerpMarket) {
         return this.parsePerpOpenOrders(
           market,
           marketConfig,
-          accountInfos,
-          filterForMangoAccount ? this.mangoAccount : undefined
+          accountInfos
         );
       }
     });
