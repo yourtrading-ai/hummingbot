@@ -18,6 +18,7 @@ import {
 import { ConfigManagerV2 } from './services/config-manager-v2';
 import { SwaggerManager } from './services/swagger-manager';
 import { EthereumBase } from './services/ethereum-base';
+import {MangoRoutes} from "./chains/solana/mango/mango.routes";
 
 const swaggerUi = require('swagger-ui-express');
 
@@ -42,6 +43,7 @@ gatewayApp.use('/wallet', WalletRoutes.router);
 
 // mount sub routers
 gatewayApp.use('/solana', SolanaRoutes.router);
+gatewayApp.use('/solana/mango', MangoRoutes.router);
 
 // a simple route to test that the server is running
 gatewayApp.get('/', (_req: Request, res: Response) => {
