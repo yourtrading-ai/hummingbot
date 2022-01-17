@@ -1,34 +1,35 @@
 import {
+  BookSide,
+  BookSideLayout,
   Config,
   getAllMarkets,
   getMarketByBaseSymbolAndKind,
-  //getMarketByPublicKey,
+  getMarketByPublicKey,
   getMultipleAccounts,
-  //getTokenBySymbol,
+  getTokenBySymbol,
   GroupConfig,
-  //makeCancelPerpOrderInstruction,
-  //makeCancelSpotOrderInstruction,
-  //makeSettleFundsInstruction,
+  makeCancelPerpOrderInstruction,
+  makeCancelSpotOrderInstruction,
+  makeSettleFundsInstruction,
   MangoAccount,
   MangoClient,
   MangoGroup,
   MarketConfig,
   PerpMarket,
   PerpMarketLayout,
-  //QUOTE_INDEX,
+  PerpOrder,
+  QUOTE_INDEX,
+  RootBank,
   TokenInfo,
 } from '@blockworks-foundation/mango-client';
-import {
-  Market,
-  //Orderbook
-} from '@project-serum/serum';
+import { Market, Orderbook } from '@project-serum/serum';
 //import { Order } from "@project-serum/serum/lib/market";
 import {
-  //Account,
+  Account,
   AccountInfo,
   PublicKey,
-  //Transaction,
-  //TransactionSignature
+  Transaction,
+  TransactionSignature,
 } from '@solana/web3.js';
 //import BN from "bn.js";
 import { logger } from '../../../services/logger';
@@ -40,6 +41,9 @@ import {
   SERVICE_UNITIALIZED_ERROR_CODE,
   SERVICE_UNITIALIZED_ERROR_MESSAGE,
 } from '../../../services/error-handler';
+import { OrderBook, OrderInfo, SimpleOrder } from './mango.types';
+import { Order as SpotOrder } from '@project-serum/serum/lib/market';
+import BN from 'bn.js';
 
 class Mango {
   private static _instance: Mango;
@@ -48,6 +52,7 @@ class Mango {
   public mangoGroupConfig: GroupConfig;
   private _mangoGroup: MangoGroup | undefined;
   private tokenList: Record<string, TokenInfo> = {};
+  private owners: Record<string, Account> = {};
   private _ready: boolean = false;
 
   constructor() {
@@ -100,7 +105,20 @@ class Mango {
     return this._ready;
   }
 
-  private mangoGroup(): MangoGroup {
+  public getTokenByAddress(address: string): TokenInfo {
+    return this.tokenList[address];
+  }
+
+  private async getOwner(mangoAccount: MangoAccount): Promise<Account> {
+    if (!this.owners[mangoAccount.owner.toBase58()])
+      this.owners[mangoAccount.owner.toBase58()] = new Account(
+        (await this.solana.getKeypair(mangoAccount.owner)).secretKey
+      );
+    return this.owners[mangoAccount.owner.toBase58()];
+  }
+
+  // to easily check initialization
+  public mangoGroup(): MangoGroup {
     if (!this._mangoGroup)
       throw new InitializationError(
         SERVICE_UNITIALIZED_ERROR_MESSAGE('MANGO'),
@@ -109,9 +127,17 @@ class Mango {
     return <MangoGroup>this._mangoGroup;
   }
 
-  public getTokenByAddress(address: string): TokenInfo {
-    return this.tokenList[address];
+  public async getFees(marketKind: 'spot' | 'perp') {
+    // TODO: For now that's ok, but get fees dynamically from chain.
+    if (marketKind === 'spot') return { maker: 0.0, taker: 0.00024 };
+    else if (marketKind === 'perp') return { maker: -0.0004, taker: 0.0005 };
+    else
+      throw new RangeError(
+        `Invalid marketKind ${marketKind}, choose 'spot' or 'perp'`
+      );
   }
+
+  /// accounts
 
   public async fetchMangoAccounts(address: PublicKey): Promise<MangoAccount[]> {
     try {
@@ -126,6 +152,19 @@ class Mango {
     }
   }
 
+  public async getMangoAccountFromPublicKey(
+    pk: PublicKey
+  ): Promise<MangoAccount> {
+    return await this.client.getMangoAccount(
+      pk,
+      this.mangoGroup().dexProgramId
+    );
+  }
+
+  /// market
+
+  // e.g. USDT-USDC, BTC-USDC, BTC-PERP...
+  // MarketConfigs contain all static information about a market
   private getMarketConfigByName(marketName: string): MarketConfig {
     const s = marketName.split('-');
     if (s[1] == 'PERP') {
@@ -133,6 +172,10 @@ class Mango {
     } else {
       return getMarketByBaseSymbolAndKind(this.mangoGroupConfig, s[0], 'spot');
     }
+  }
+
+  public getAllMarketConfigs(): MarketConfig[] {
+    return getAllMarkets(this.mangoGroupConfig);
   }
 
   public async fetchMarket(marketName: string): Promise<Market | PerpMarket> {
@@ -144,7 +187,7 @@ class Mango {
       return this.configToMarket(marketConfig, marketAccountInfo);
     else
       throw new Error(
-        `Error retrieving AccountInfo for Mango market ${marketName}`
+        `Error retrieving AccountInfo for Mango market ${marketConfig.name}`
       );
   }
 
@@ -199,24 +242,54 @@ class Mango {
     throw new RangeError(`Invalid MarketConfig.kind: ${config.kind}`);
   }
 
-  /**
-  public async fetchAllBidsAndAsks(
-    mangoAccount: MangoAccount,
-    marketName?: string
-  ): Promise<OrderBook[]> {
-    await mangoAccount.loadOpenOrders(
-      this.solana.connection,
-      new PublicKey(this.mangoGroupConfig.serumProgramId)
-    );
-    let allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
-    let allMarketPks = allMarketConfigs.map((m) => m.publicKey);
+  // orderbooks
 
-    if (marketName !== undefined) {
-      allMarketConfigs = allMarketConfigs.filter(
-        (marketConfig) => marketConfig.name === marketName
+  public async fetchOrderBook(market: Market | PerpMarket): Promise<OrderBook> {
+    return {
+      market: {
+        account: market,
+        config: <MarketConfig>(
+          getMarketByPublicKey(this.mangoGroupConfig, market.publicKey)
+        ),
+      },
+      bids: await market
+        .loadBids(this.solana.connection)
+        .then((value) => value.getL2(1000))
+        .then((l2) =>
+          l2.map<SimpleOrder>((order) => {
+            return {
+              price: order[0],
+              size: order[1],
+            };
+          })
+        ),
+      asks: await market
+        .loadAsks(this.solana.connection)
+        .then((value) => value.getL2(1000))
+        .then((l2) =>
+          l2.map<SimpleOrder>((order) => {
+            return {
+              price: order[0],
+              size: order[1],
+            };
+          })
+        ),
+    };
+  }
+
+  // orders
+
+  public async fetchOrdersFromAccount(
+    mangoAccount: MangoAccount,
+    refresh: boolean = false
+  ): Promise<OrderInfo[][]> {
+    if (refresh) {
+      await mangoAccount.loadOpenOrders(
+        this.solana.connection,
+        this.mangoGroup().dexProgramId
       );
-      allMarketPks = allMarketConfigs.map((m) => m.publicKey);
     }
+    let allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
 
     const allBidsAndAsksPks = allMarketConfigs
       .map((m) => [m.bidsKey, m.asksKey])
@@ -227,28 +300,24 @@ class Mango {
     );
 
     const accountInfos: { [key: string]: AccountInfo<Buffer> } = {};
-    allBidsAndAsksAccountInfos.forEach(
-      ({ publicKey, context, accountInfo }) => {
-        accountInfos[publicKey.toBase58()] = accountInfo;
-      }
-    );
+    allBidsAndAsksAccountInfos.forEach(({ publicKey, accountInfo }) => {
+      accountInfos[publicKey.toBase58()] = accountInfo;
+    });
 
     const markets = await this.fetchAllMarkets();
 
     return Object.entries(markets).map(([address, market]) => {
       const marketConfig = getMarketByPublicKey(this.mangoGroupConfig, address);
-      if (market instanceof Market) {
-        return this.parseSpotOrders(
-          market,
-          marketConfig,
-          accountInfos
-        );
-      } else if (market instanceof PerpMarket) {
-        return this.parsePerpOpenOrders(
-          market,
-          marketConfig,
-          accountInfos
-        );
+      if (marketConfig) {
+        if (market instanceof Market) {
+          return this.parseSpotOrders(market, marketConfig, accountInfos);
+        } else if (market instanceof PerpMarket) {
+          return this.parsePerpOpenOrders(market, marketConfig, accountInfos);
+        } else {
+          throw new Error(`Invalid market type: ${typeof market}`);
+        }
+      } else {
+        throw new Error(`Unknown market public key: ${address}`);
       }
     });
   }
@@ -257,11 +326,16 @@ class Mango {
     marketConfig: MarketConfig,
     mangoAccount: MangoAccount
   ): PublicKey | null {
-    const spotOpenOrdersAccount = mangoAccount.spotOpenOrdersAccounts[marketConfig.marketIndex];
+    const spotOpenOrdersAccount =
+      mangoAccount.spotOpenOrdersAccounts[marketConfig.marketIndex];
     return spotOpenOrdersAccount ? spotOpenOrdersAccount.publicKey : null;
   }
 
-  public async fetchAllSpotFills(): Promise<any[]> {
+  /**
+   * Fetches all recent fills for given MangoAccount
+   * @param mangoAccount User's mango account
+   */
+  public async fetchAllSpotFills(mangoAccount: MangoAccount): Promise<any[]> {
     const allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
     const allMarkets = await this.fetchAllMarkets();
 
@@ -272,7 +346,7 @@ class Mango {
     let allButRecentMangoAccountSpotFills: any[] = [];
 
     for (const config of allMarketConfigs) {
-      if (config.kind === "spot") {
+      if (config.kind === 'spot') {
         const openOrdersAccount =
           mangoAccount.spotOpenOrdersAccounts[config.marketIndex];
         if (openOrdersAccount === undefined) {
@@ -287,6 +361,7 @@ class Mango {
             responseJson?.data ? responseJson.data : []
           );
 
+        // @ts-ignore
         const recentMangoAccountSpotFills: any[] = await allMarkets[
           config.publicKey.toBase58()
         ]
@@ -331,8 +406,9 @@ class Mango {
     );
     const responseJson = await response.json();
     const allButRecentMangoAccountPerpFills = responseJson?.data || [];
-    for (const config of allMarketConfigs) {
-      if (config.kind === "perp") {
+    for (const config of this.getAllMarketConfigs()) {
+      if (config.kind === 'perp') {
+        // @ts-ignore
         const recentMangoAccountPerpFills: any[] = await allMarkets[
           config.publicKey.toBase58()
         ]
@@ -368,119 +444,102 @@ class Mango {
 
   public async placeOrder(
     mangoAccount: MangoAccount,
-    market: string,
-    side: "buy" | "sell",
+    market: MarketConfig,
+    side: 'buy' | 'sell',
     quantity: number,
     price?: number,
-    orderType: "ioc" | "postOnly" | "market" | "limit" = "limit",
+    orderType: 'ioc' | 'postOnly' | 'market' | 'limit' = 'limit',
     clientOrderId?: number
   ): Promise<TransactionSignature> {
-    if (market.includes("PERP")) {
-      const perpMarketConfig = getMarketByBaseSymbolAndKind(
-        this.mangoGroupConfig,
-        market.split("-")[0],
-        "perp"
-      );
-      const perpMarket = await this.mangoGroup.loadPerpMarket(
-        this.connection,
-        perpMarketConfig.marketIndex,
-        perpMarketConfig.baseDecimals,
-        perpMarketConfig.quoteDecimals
+    const owner = await this.getOwner(mangoAccount);
+    if (market.kind === 'perp') {
+      const perpMarket = await this.mangoGroup().loadPerpMarket(
+        this.solana.connection,
+        market.marketIndex,
+        market.baseDecimals,
+        market.quoteDecimals
       );
       // TODO: this is a workaround, mango-v3 has a assertion for price>0 for all order types
       // this will be removed soon hopefully
-      price = orderType !== "market" ? price : 1;
-      return await this.client.placePerpOrder(
-        this.mangoGroup,
+      price = orderType !== 'market' ? price : 1;
+      return await this.client.placePerpOrde(
+        this.mangoGroup(),
         mangoAccount,
-        this.mangoGroup.mangoCache,
+        this.mangoGroup().mangoCache,
         perpMarket,
-        this.owner,
+        owner,
         side,
-        price,
+        <number>price,
         quantity,
         orderType,
         clientOrderId
       );
     } else {
       // serum doesn't really support market orders, calculate a pseudo market price
-      price =
-        orderType !== "market"
-          ? price
-          : await this.calculateMarketOrderPrice(market, quantity, side);
-
-      const spotMarketConfig = getMarketByBaseSymbolAndKind(
-        this.mangoGroupConfig,
-        market.split("/")[0],
-        "spot"
-      );
       const spotMarket = await Market.load(
-        this.connection,
-        spotMarketConfig.publicKey,
+        this.solana.connection,
+        market.publicKey,
         undefined,
         this.mangoGroupConfig.serumProgramId
       );
+
+      price =
+        orderType !== 'market'
+          ? price
+          : await this.calculateMarketOrderPrice(spotMarket, quantity, side);
+
       return await this.client.placeSpotOrder(
-        this.mangoGroup,
-        this.mangoAccount,
-        this.mangoGroup.mangoCache,
+        this.mangoGroup(),
+        mangoAccount,
+        this.mangoGroup().mangoCache,
+        // @ts-ignore
         spotMarket,
-        this.owner,
+        owner,
         side,
         price,
         quantity,
-        orderType === "market" ? "limit" : orderType,
-        new BN(clientOrderId)
+        orderType === 'market' ? 'limit' : orderType,
+        new BN(<number>clientOrderId)
       );
     }
   }
 
   private async calculateMarketOrderPrice(
-    market: string,
+    market: Market | PerpMarket,
     quantity: number,
-    side: "buy" | "sell"
+    side: 'buy' | 'sell'
   ): Promise<number> {
-    const bidsAndAsks = await this.fetchAllBidsAndAsks(false, market);
-
-    const bids = bidsAndAsks
-      .flat()
-      .filter((orderInfo) => orderInfo.order.side === "buy")
-      .sort((b1, b2) => b2.order.price - b1.order.price);
-    const asks = bidsAndAsks
-      .flat()
-      .filter((orderInfo) => orderInfo.order.side === "sell")
-      .sort((a1, a2) => a1.order.price - a2.order.price);
-
-    const orders: OrderInfo[] = side === "buy" ? asks : bids;
+    const orderBook = await this.fetchOrderBook(market);
+    const orders: SimpleOrder[] =
+      side === 'buy' ? orderBook.asks : orderBook.bids;
 
     let acc = 0;
     let selectedOrder;
     for (const order of orders) {
-      acc += order.order.size;
+      acc += order.size;
       if (acc >= quantity) {
         selectedOrder = order;
         break;
       }
     }
-
     if (!selectedOrder) {
-      throw new Error("Orderbook empty!");
+      throw new Error('Orderbook empty!');
     }
-
-    if (side === "buy") {
-      return selectedOrder.order.price * 1.05;
+    if (side === 'buy') {
+      return selectedOrder.price * 1.05;
     } else {
-      return selectedOrder.order.price * 0.95;
+      return selectedOrder.price * 0.95;
     }
   }
 
-  public async cancelAllOrders(): Promise<void> {
-    const allMarkets = await this.fetchMarkets();
-    const orders = (await this.fetchAllBidsAndAsks(true)).flat();
+  public async cancelAllOrders(mangoAccount: MangoAccount): Promise<void> {
+    const allMarkets = await this.fetchAllMarkets();
+    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
 
     const transactions = await Promise.all(
       orders.map((orderInfo) =>
         this.buildCancelOrderTransaction(
+          mangoAccount,
           orderInfo,
           allMarkets[orderInfo.market.account.publicKey.toBase58()]
         )
@@ -507,32 +566,38 @@ class Mango {
     }
 
     for (const transaction of transactionsToSend) {
-      await this.client.sendTransaction(transaction, this.owner, []);
+      await this.client.sendTransaction(
+        transaction,
+        await this.solana.getKeypair(mangoAccount.publicKey),
+        []
+      );
     }
   }
 
   public async cancelOrder(
+    mangoAccount: MangoAccount,
     orderInfo: OrderInfo,
     market?: Market | PerpMarket
   ): Promise<TransactionSignature> {
-    if (orderInfo.market.config.kind === "perp") {
+    const owner = await this.getOwner(mangoAccount);
+    if (orderInfo.market.config.kind === 'perp') {
       const perpMarketConfig = getMarketByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
-        "perp"
+        'perp'
       );
       if (market === undefined) {
-        market = await this.mangoGroup.loadPerpMarket(
-          this.connection,
+        market = await this.mangoGroup().loadPerpMarket(
+          this.solana.connection,
           perpMarketConfig.marketIndex,
           perpMarketConfig.baseDecimals,
           perpMarketConfig.quoteDecimals
         );
       }
       return await this.client.cancelPerpOrder(
-        this.mangoGroup,
-        this.mangoAccount,
-        this.owner,
+        this.mangoGroup(),
+        mangoAccount,
+        owner,
         market as PerpMarket,
         orderInfo.order as PerpOrder
       );
@@ -540,48 +605,51 @@ class Mango {
       const spotMarketConfig = getMarketByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
-        "spot"
+        'spot'
       );
       if (market === undefined) {
         market = await Market.load(
-          this.connection,
+          this.solana.connection,
           spotMarketConfig.publicKey,
           undefined,
           this.mangoGroupConfig.serumProgramId
         );
       }
       return await this.client.cancelSpotOrder(
-        this.mangoGroup,
-        this.mangoAccount,
-        this.owner,
+        this.mangoGroup(),
+        mangoAccount,
+        owner,
+        // @ts-ignore
         market as Market,
-        orderInfo.order as Order
+        orderInfo.order as SimpleOrder
       );
     }
   }
 
   public async buildCancelOrderTransaction(
+    mangoAccount: MangoAccount,
     orderInfo: OrderInfo,
     market?: Market | PerpMarket
   ): Promise<Transaction> {
-    if (orderInfo.market.config.kind === "perp") {
+    const owner = await this.getOwner(mangoAccount);
+    if (orderInfo.market.config.kind === 'perp') {
       const perpMarketConfig = getMarketByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
-        "perp"
+        'perp'
       );
       if (market === undefined) {
-        market = await this.mangoGroup.loadPerpMarket(
-          this.connection,
+        market = await this.mangoGroup().loadPerpMarket(
+          this.solana.connection,
           perpMarketConfig.marketIndex,
           perpMarketConfig.baseDecimals,
           perpMarketConfig.quoteDecimals
         );
       }
       return this.buildCancelPerpOrderInstruction(
-        this.mangoGroup,
-        this.mangoAccount,
-        this.owner,
+        this.mangoGroup(),
+        mangoAccount,
+        owner,
         market as PerpMarket,
         orderInfo.order as PerpOrder
       );
@@ -589,43 +657,49 @@ class Mango {
       const spotMarketConfig = getMarketByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
-        "spot"
+        'spot'
       );
       if (market === undefined) {
         market = await Market.load(
-          this.connection,
+          this.solana.connection,
           spotMarketConfig.publicKey,
           undefined,
           this.mangoGroupConfig.serumProgramId
         );
       }
       return this.buildCancelSpotOrderTransaction(
-        this.mangoGroup,
-        this.mangoAccount,
-        this.owner,
+        this.mangoGroup(),
+        mangoAccount,
+        owner,
         market as Market,
-        orderInfo.order as Order
+        orderInfo.order as SpotOrder
       );
     }
   }
 
-  public async getOrderByOrderId(orderId: string): Promise<OrderInfo[]> {
-    const orders = (await this.fetchAllBidsAndAsks(true)).flat();
-    const orderInfos = orders.filter(
+  public async getOrderByOrderId(
+    mangoAccount: MangoAccount,
+    orderId: string
+  ): Promise<OrderInfo[]> {
+    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
+    return orders.filter(
       (orderInfo) => orderInfo.order.orderId.toString() === orderId
     );
-    return orderInfos;
   }
 
-  public async getOrderByClientId(clientId: string): Promise<OrderInfo[]> {
-    const orders = await (await this.fetchAllBidsAndAsks(true)).flat();
-    const orderInfos = orders.filter(
-      (orderInfo) => orderInfo.order.clientId.toNumber().toString() === clientId
+  public async getOrderByClientId(
+    mangoAccount: MangoAccount,
+    clientId: string
+  ): Promise<OrderInfo[]> {
+    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
+    return orders.filter(
+      (orderInfo) =>
+        orderInfo.order.clientId?.toNumber().toString() === clientId
     );
-    return orderInfos;
   }
 
   public async withdraw(
+    mangoAccount: MangoAccount,
     tokenSymbol: string,
     amount: number
   ): Promise<TransactionSignature> {
@@ -633,18 +707,21 @@ class Mango {
       this.mangoGroupConfig,
       tokenSymbol
     );
-    const tokenIndex = this.mangoGroup.getTokenIndex(tokenToWithdraw.mintKey);
-    return this.client.withdraw(
-      this.mangoGroup,
-      this.mangoAccount,
-      this.owner,
-      this.mangoGroup.tokens[tokenIndex].rootBank,
-      this.mangoGroup.rootBankAccounts[tokenIndex].nodeBankAccounts[0]
-        .publicKey,
-      this.mangoGroup.rootBankAccounts[tokenIndex].nodeBankAccounts[0].vault,
-      Number(amount),
-      false
-    );
+    const tokenIndex = this.mangoGroup().getTokenIndex(tokenToWithdraw.mintKey);
+    if (this.mangoGroup().rootBankAccounts[tokenIndex]) {
+      return this.client.withdraw(
+        this.mangoGroup(),
+        mangoAccount,
+        await this.getOwner(mangoAccount),
+        this.mangoGroup().tokens[tokenIndex].rootBank,
+        (<RootBank>this.mangoGroup().rootBankAccounts[tokenIndex])
+          .nodeBankAccounts[0].publicKey,
+        (<RootBank>this.mangoGroup().rootBankAccounts[tokenIndex])
+          .nodeBankAccounts[0].vault,
+        Number(amount),
+        false
+      );
+    } else throw new Error();
   }
 
   /// private
@@ -655,13 +732,17 @@ class Mango {
     accountInfos: { [key: string]: AccountInfo<Buffer> },
     mangoAccount?: MangoAccount
   ): OrderInfo[] {
-    const bidData = accountInfos[market["_decoded"].bids.toBase58()]?.data;
-    const askData = accountInfos[market["_decoded"].asks.toBase58()]?.data;
+    const bidData = accountInfos[market['_decoded'].bids.toBase58()]?.data;
+    const askData = accountInfos[market['_decoded'].asks.toBase58()]?.data;
 
     const bidOrderBook =
-      market && bidData ? Orderbook.decode(market, bidData) : ([] as Order[]);
+      market && bidData
+        ? Orderbook.decode(market, bidData)
+        : ([] as SpotOrder[]);
     const askOrderBook =
-      market && askData ? Orderbook.decode(market, askData) : ([] as Order[]);
+      market && askData
+        ? Orderbook.decode(market, askData)
+        : ([] as SpotOrder[]);
 
     let openOrdersForMarket = [...bidOrderBook, ...askOrderBook];
     if (mangoAccount !== undefined) {
@@ -740,7 +821,7 @@ class Mango {
     mangoAccount: MangoAccount,
     owner: Account,
     spotMarket: Market,
-    order: Order
+    order: SpotOrder
   ): Promise<Transaction> {
     const transaction = new Transaction();
     const instruction = makeCancelSpotOrderInstruction(
@@ -750,11 +831,11 @@ class Mango {
       mangoAccount.publicKey,
       spotMarket.programId,
       spotMarket.publicKey,
-      spotMarket["_decoded"].bids,
-      spotMarket["_decoded"].asks,
+      spotMarket['_decoded'].bids,
+      spotMarket['_decoded'].asks,
       order.openOrdersAddress,
       mangoGroup.signerKey,
-      spotMarket["_decoded"].eventQueue,
+      spotMarket['_decoded'].eventQueue,
       order
     );
     transaction.add(instruction);
@@ -762,7 +843,7 @@ class Mango {
     const dexSigner = await PublicKey.createProgramAddress(
       [
         spotMarket.publicKey.toBuffer(),
-        spotMarket["_decoded"].vaultSignerNonce.toArrayLike(Buffer, "le", 8),
+        spotMarket['_decoded'].vaultSignerNonce.toArrayLike(Buffer, 'le', 8),
       ],
       spotMarket.programId
     );
@@ -777,7 +858,7 @@ class Mango {
     const quoteNodeBank = quoteRootBank?.nodeBankAccounts[0];
 
     if (!baseNodeBank || !quoteNodeBank) {
-      throw new Error("Invalid or missing node banks");
+      throw new Error('Invalid or missing node banks');
     }
 
     // todo what is a makeSettleFundsInstruction?
@@ -791,8 +872,8 @@ class Mango {
       spotMarket.publicKey,
       mangoAccount.spotOpenOrders[marketIndex],
       mangoGroup.signerKey,
-      spotMarket["_decoded"].baseVault,
-      spotMarket["_decoded"].quoteVault,
+      spotMarket['_decoded'].baseVault,
+      spotMarket['_decoded'].quoteVault,
       mangoGroup.tokens[marketIndex].rootBank,
       baseNodeBank.publicKey,
       mangoGroup.tokens[QUOTE_INDEX].rootBank,
@@ -804,7 +885,7 @@ class Mango {
     transaction.add(settleFundsInstruction);
 
     return transaction;
-  } **/
+  }
 }
 
 export default Mango;
