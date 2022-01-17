@@ -5,7 +5,7 @@
     "allowedSlippage": { "type": "string" },
     "groupName": { "type": "string" },
     "ttl": { "type": "number" },
-    "defaultMangoAccount": { "type": "string" }
+    "defaultMangoAccount": { "type": ["string", "null"] }
   },
   "required": [
     "allowedSlippage",
