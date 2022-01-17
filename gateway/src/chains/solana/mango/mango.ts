@@ -462,7 +462,7 @@ class Mango {
       // TODO: this is a workaround, mango-v3 has a assertion for price>0 for all order types
       // this will be removed soon hopefully
       price = orderType !== 'market' ? price : 1;
-      return await this.client.placePerpOrde(
+      return await this.client.placePerpOrder(
         this.mangoGroup(),
         mangoAccount,
         this.mangoGroup().mangoCache,

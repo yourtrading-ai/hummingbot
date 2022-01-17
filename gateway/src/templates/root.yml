@@ -4,6 +4,10 @@ configurations:
     configurationPath: solana.yml
     schemaPath: solana-schema.json
 
+  $namespace mango:
+    configurationPath: mango.yml
+    schemaPath: mango-schema.json
+
   $namespace avalanche:
     configurationPath: avalanche.yml
     schemaPath: ethereum-schema.json

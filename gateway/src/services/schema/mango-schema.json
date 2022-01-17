@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "allowedSlippage": { "type": "string" },
+    "groupName": { "type": "string" },
+    "ttl": { "type": "number" },
+    "defaultMangoAccount": { "type": "string" }
+  },
+  "required": [
+    "allowedSlippage",
+    "groupName",
+    "ttl"
+  ],
+  "additionalProperties": false
+}
