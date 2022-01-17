@@ -1,11 +1,7 @@
-import {
-  MarketConfig,
-  PerpMarket,
-  PerpOrder,
-} from '@blockworks-foundation/mango-client';
-import { I80F48 } from '@blockworks-foundation/mango-client/lib/src/fixednum';
-import { Market as SpotMarket, OpenOrders } from '@project-serum/serum';
-import { Order } from '@project-serum/serum/lib/market';
+import {MarketConfig, PerpMarket, PerpOrder,} from '@blockworks-foundation/mango-client';
+import {I80F48} from '@blockworks-foundation/mango-client/lib/src/fixednum';
+import {Market as SpotMarket, OpenOrders} from '@project-serum/serum';
+import {Order as SpotOrder} from '@project-serum/serum/lib/market';
 
 interface BalancesBase {
   key: string;
@@ -32,11 +28,28 @@ export interface Balances extends BalancesBase {
 
 export type OrderInfo = {
   market: Market;
-  order: Order | PerpOrder;
+  order: SpotOrder | PerpOrder;
 };
 
 export type OrderBook = {
   market: Market;
-  bids: OrderInfo[];
-  asks: OrderInfo[];
+  bids: SimpleOrder[];
+  asks: SimpleOrder[];
 };
+
+export interface SimpleOrder {
+  price: number;
+  size: number;
+}
+
+export interface OpenOrder extends SimpleOrder {
+  marketName: string;
+  orderId: string;
+  filled: string; // how much of this order has been filled
+}
+
+export interface Fill extends OpenOrder {
+  //filled: string - represents now how much has been filled at given timestamp
+  timestamp: string; // the time at which the fill happened
+  fee: string; // can be positive, when paying, or negative, when rebated
+}

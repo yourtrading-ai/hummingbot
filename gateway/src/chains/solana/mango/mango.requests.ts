@@ -1,6 +1,8 @@
 //
 // GET /accounts
 //
+import {Fill, OpenOrder, SimpleOrder} from "./mango.types";
+
 interface BalanceRecord {
   marketName: string;
   deposits: string;
@@ -22,6 +24,8 @@ interface MangoSpotAccount {
   leverage: number;
   health: number;
   canOpenNewOrders: boolean;
+  beingLiquidated: boolean;  // health below 0
+  netBalance: string;  // = deposits - borrows
   balances: BalanceRecord[];
   perpPositions: PerpPosition[];
 }
@@ -57,7 +61,7 @@ interface Market {
 }
 
 interface SpotMarket extends Market {
-  depositRate: string;
+  depositRate: string;  //
   borrowRate: string;
 }
 
@@ -81,25 +85,14 @@ export interface MangoOrderbookRequest {
   marketName: string;
 }
 
-interface Order {
-  price: string;
-  size: string;
-}
-
 export interface MangoOrderbookResponse {
-  bids: Order[];
-  asks: Order[];
+  bids: SimpleOrder[];
+  asks: SimpleOrder[];
 }
 
 //
 // GET /orders
 //
-interface OpenOrder extends Order {
-  marketName: string;
-  orderId: string;
-  filled: string; // how much of this order has been filled
-}
-
 export interface MangoGetOrdersResponse {
   spot: OpenOrder[];
   perp: OpenOrder[];
@@ -138,12 +131,6 @@ export interface MangoCancelOrderResponse {
 //
 // GET /fills
 //
-interface Fill extends OpenOrder {
-  //filled: string - represents now how much has been filled at given timestamp
-  timestamp: string; // the time at which the fill happened
-  fee: string; // can be positive, when paying, or negative, when rebated
-}
-
 export interface MangoFillsResponse {
   // sorted from newest to oldest
   spot: Fill[];
