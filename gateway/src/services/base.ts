@@ -3,6 +3,8 @@ import { BigNumber } from 'ethers';
 // the type of information source for tokens
 export type TokenListType = 'FILE' | 'URL';
 
+export const walletPath = './conf/wallets';
+
 // insert a string into another string at an index
 const stringInsert = (str: string, val: string, index: number) => {
   if (index > 0) {
@@ -100,4 +102,13 @@ export const latency = (startTime: number, endTime: number): number => {
   return (endTime - startTime) / 1000;
 };
 
-export const walletPath = './conf/wallets';
+export function zipDict<K extends string | number | symbol, V>(
+  keys: K[],
+  values: V[]
+): Partial<Record<K, V>> {
+  const result: Partial<Record<K, V>> = {};
+  keys.forEach((key, index) => {
+    result[key] = values[index];
+  });
+  return result;
+}
