@@ -1,7 +1,11 @@
-import {MarketConfig, PerpMarket, PerpOrder,} from '@blockworks-foundation/mango-client';
-import {I80F48} from '@blockworks-foundation/mango-client/lib/src/fixednum';
-import {Market as SpotMarket, OpenOrders} from '@project-serum/serum';
-import {Order as SpotOrder} from '@project-serum/serum/lib/market';
+import {
+  MarketConfig,
+  PerpMarket,
+  PerpOrder,
+} from '@blockworks-foundation/mango-client';
+import { I80F48 } from '@blockworks-foundation/mango-client/lib/src/fixednum';
+import { Market as SpotMarket, OpenOrders } from '@project-serum/serum';
+import { Order as SpotOrder } from '@project-serum/serum/lib/market';
 
 interface BalancesBase {
   key: string;

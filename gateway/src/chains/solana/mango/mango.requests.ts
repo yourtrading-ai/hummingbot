@@ -1,7 +1,7 @@
 //
 // GET /accounts
 //
-import {Fill, OpenOrder, SimpleOrder} from "./mango.types";
+import { Fill, OpenOrder, SimpleOrder } from './mango.types';
 
 interface BalanceRecord {
   marketName: string;
@@ -24,8 +24,8 @@ interface MangoSpotAccount {
   leverage: number;
   health: number;
   canOpenNewOrders: boolean;
-  beingLiquidated: boolean;  // health below 0
-  netBalance: string;  // = deposits - borrows
+  beingLiquidated: boolean; // health below 0
+  netBalance: string; // = deposits - borrows
   balances: BalanceRecord[];
   perpPositions: PerpPosition[];
 }
@@ -61,7 +61,7 @@ interface Market {
 }
 
 interface SpotMarket extends Market {
-  depositRate: string;  //
+  depositRate: string; //
   borrowRate: string;
 }
 

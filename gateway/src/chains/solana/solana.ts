@@ -182,8 +182,7 @@ export class Solana {
   async getKeypair(address: string | PublicKey): Promise<Keypair> {
     const path = `${walletPath}/solana`;
 
-    if(address instanceof PublicKey)
-      address = address.toBase58()
+    if (address instanceof PublicKey) address = address.toBase58();
 
     const encryptedPrivateKey: any = JSON.parse(
       await fse.readFile(`${path}/${address}.json`, 'utf8'),
