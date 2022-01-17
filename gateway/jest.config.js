@@ -13,6 +13,7 @@ module.exports = {
     'src/chains/avalanche/pangolin/pangolin.ts',
     'conf/migration/migrations.js',
     'src/chains/solana/solana.ts',
+    'src/chains/solana/mango/mango.ts',
   ],
   modulePathIgnorePatterns: ['<rootDir>/dist/'],
   setupFilesAfterEnv: ['<rootDir>/test/setupTests.js'],
