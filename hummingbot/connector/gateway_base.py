@@ -95,9 +95,6 @@ class GatewayBase(ConnectorBase):
     def ready(self):
         raise NotImplementedError
 
-    async def get_gateway_status(self):
-        return await self._api_request('get', '')
-
     @property
     def amm_orders(self) -> List[InFlightOrderBase]:
         return [
@@ -126,6 +123,19 @@ class GatewayBase(ConnectorBase):
         except Exception as e:
             self.logger().network(
                 "Error fetching chain info",
+                exc_info=True,
+                app_warning_msg=str(e)
+            )
+
+    async def get_gateway_status(self):
+        """
+        Calls the status endpoint on Gateway to know basic info about connected networks.
+        """
+        try:
+            return await self._api_request("get", "/status")
+        except Exception as e:
+            self.logger().network(
+                "Error fetching gateway status info",
                 exc_info=True,
                 app_warning_msg=str(e)
             )
