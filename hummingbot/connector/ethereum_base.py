@@ -22,7 +22,7 @@ from hummingbot.core.event.events import (
     TradeFee
 )
 from hummingbot.connector.gateway_base import GatewayBase
-from hummingbot.connector.ethereum_in_flight_order import EthereumInFlightOrder
+from hummingbot.connector.gateway_in_flight_order import GatewayInFlightOrder
 from hummingbot.core.utils.ethereum import check_transaction_exceptions, fetch_trading_pairs
 
 s_logger = None
@@ -103,7 +103,7 @@ class EthereumBase(GatewayBase):
         }
 
     @property
-    def approval_orders(self) -> List[EthereumInFlightOrder]:
+    def approval_orders(self) -> List[GatewayInFlightOrder]:
         return [
             approval_order
             for approval_order in self._in_flight_orders.values() if approval_order.client_order_id.split("_")[0] == "approve"
@@ -266,29 +266,6 @@ class EthereumBase(GatewayBase):
         safe_ensure_future(self._create_order(side, order_id, trading_pair, amount, price))
         return order_id
 
-    def start_tracking_order(self,
-                             order_id: str,
-                             exchange_order_id: str = None,
-                             trading_pair: str = "",
-                             order_type: OrderType = OrderType.LIMIT,
-                             trade_type: TradeType = TradeType.BUY,
-                             price: Decimal = s_decimal_0,
-                             amount: Decimal = s_decimal_0,
-                             gas_price: Decimal = s_decimal_0):
-        """
-        Starts tracking an order by simply adding it into _in_flight_orders dictionary.
-        """
-        self._in_flight_orders[order_id] = EthereumInFlightOrder(
-            client_order_id=order_id,
-            exchange_order_id=exchange_order_id,
-            trading_pair=trading_pair,
-            order_type=order_type,
-            trade_type=trade_type,
-            price=price,
-            amount=amount,
-            gas_price=gas_price
-        )
-
     async def _create_order(self,
                             trade_type: TradeType,
                             order_id: str,
@@ -355,7 +332,7 @@ class EthereumBase(GatewayBase):
             self.trigger_event(MarketEvent.OrderFailure,
                                MarketOrderFailureEvent(self.current_timestamp, order_id, OrderType.LIMIT))
 
-    async def _update_approval_order_status(self, tracked_orders: EthereumInFlightOrder):
+    async def _update_approval_order_status(self, tracked_orders: GatewayInFlightOrder):
         """
         Calls REST API to get status update for each in-flight order.
         This function can also be used to update status of simple swap orders.
@@ -427,7 +404,7 @@ class EthereumBase(GatewayBase):
                                            ))
                         self.stop_tracking_order(tracked_order.client_order_id)
 
-    async def _update_order_status(self, tracked_orders: EthereumInFlightOrder):
+    async def _update_order_status(self, tracked_orders: GatewayInFlightOrder):
         """
         Calls REST API to get status update for each in-flight amm orders.
         """
