@@ -73,6 +73,21 @@ export namespace MangoRoutes {
     )
   );
 
+  /**
+   * Returns the last traded prices.
+   */
+  router.get(
+    '/ticker',
+    asyncHandler(
+      async (
+        req: Request<unknown, unknown, MangoMarketsRequest>,
+        res: Response<MangoMarketsResponse, any>
+      ) => {
+        res.status(200).json(await markets(req.body));
+      }
+    )
+  );
+
   router.get(
     '/orderbook',
     asyncHandler(

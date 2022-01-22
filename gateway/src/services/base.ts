@@ -105,10 +105,15 @@ export const latency = (startTime: number, endTime: number): number => {
 export function zipDict<K extends string | number | symbol, V>(
   keys: K[],
   values: V[]
-): Partial<Record<K, V>> {
+): Record<K, V> {
+  if (keys.length != values.length) {
+    throw new Error(
+      `Keys and values are not of same length! Keys: ${keys.length}, values: ${values.length}`
+    );
+  }
   const result: Partial<Record<K, V>> = {};
   keys.forEach((key, index) => {
     result[key] = values[index];
   });
-  return result;
+  return <Record<K, V>>result;
 }

@@ -2,9 +2,9 @@ import {
   BookSide,
   BookSideLayout,
   Config,
-  getAllMarkets,
-  getMarketByBaseSymbolAndKind,
-  getMarketByPublicKey,
+  getAllMarkets as getAllMarketConfigs,
+  getMarketByBaseSymbolAndKind as getMarketConfigByBaseSymbolAndKind,
+  getMarketByPublicKey as getMarketConfigByPublicKey,
   getMultipleAccounts,
   getTokenBySymbol,
   GroupConfig,
@@ -41,15 +41,16 @@ import {
   SERVICE_UNITIALIZED_ERROR_CODE,
   SERVICE_UNITIALIZED_ERROR_MESSAGE,
 } from '../../../services/error-handler';
-import { OrderBook, OrderInfo, SimpleOrder } from './mango.types';
+import { FilledOrder, OrderBook, OrderInfo, SimpleOrder } from './mango.types';
 import { Order as SpotOrder } from '@project-serum/serum/lib/market';
 import BN from 'bn.js';
 
 class Mango {
+  public mangoGroupConfig: GroupConfig;
+
   private static _instance: Mango;
   private solana: Solana = Solana.getInstance();
   private client: MangoClient;
-  public mangoGroupConfig: GroupConfig;
   private _mangoGroup: MangoGroup | undefined;
   private tokenList: Record<string, TokenInfo> = {};
   private owners: Record<string, Account> = {};
@@ -92,9 +93,11 @@ class Mango {
       this.tokenList[token.mint.toBase58()] = token;
     }
 
+    // needs to be updated to fetch current borrow and deposit rates
     logger.info(`- loading root banks`);
     await this._mangoGroup.loadRootBanks(this.solana.connection);
 
+    //
     logger.info(`- loading cache`);
     await this._mangoGroup.loadCache(this.solana.connection);
 
@@ -125,6 +128,14 @@ class Mango {
         SERVICE_UNITIALIZED_ERROR_CODE
       );
     return <MangoGroup>this._mangoGroup;
+  }
+
+  /**
+   * For some operations, one needs to refresh the mango group's caches.
+   */
+  public async refreshMangoGroup() {
+    await this.mangoGroup().loadCache(this.solana.connection);
+    await this.mangoGroup().loadRootBanks(this.solana.connection);
   }
 
   public async getFees(marketKind: 'spot' | 'perp') {
@@ -168,14 +179,22 @@ class Mango {
   private getMarketConfigByName(marketName: string): MarketConfig {
     const s = marketName.split('-');
     if (s[1] == 'PERP') {
-      return getMarketByBaseSymbolAndKind(this.mangoGroupConfig, s[0], 'perp');
+      return getMarketConfigByBaseSymbolAndKind(
+        this.mangoGroupConfig,
+        s[0],
+        'perp'
+      );
     } else {
-      return getMarketByBaseSymbolAndKind(this.mangoGroupConfig, s[0], 'spot');
+      return getMarketConfigByBaseSymbolAndKind(
+        this.mangoGroupConfig,
+        s[0],
+        'spot'
+      );
     }
   }
 
   public getAllMarketConfigs(): MarketConfig[] {
-    return getAllMarkets(this.mangoGroupConfig);
+    return getAllMarketConfigs(this.mangoGroupConfig);
   }
 
   public async fetchMarket(marketName: string): Promise<Market | PerpMarket> {
@@ -191,27 +210,28 @@ class Mango {
       );
   }
 
-  public async fetchAllMarkets(): Promise<
-    Partial<Record<string, Market | PerpMarket>>
-  > {
-    const allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
-    const allMarketPks = allMarketConfigs.map((m) => m.publicKey);
-    const allMarketAccountInfos = await getMultipleAccounts(
+  /**
+   * Fetches requested markets as marketName -> Market dictionary.
+   * @param marketConfigs
+   */
+  public async fetchMarkets(
+    marketConfigs?: MarketConfig[]
+  ): Promise<Record<string, Market | PerpMarket>> {
+    if (marketConfigs === undefined) {
+      marketConfigs = this.getAllMarketConfigs();
+    }
+    const marketPks = marketConfigs.map((m) => m.publicKey);
+    const marketAccountInfos = await getMultipleAccounts(
       this.solana.connection,
-      allMarketPks
+      marketPks
     );
-    const allMarketAccounts = allMarketConfigs.map(
+    const marketNames = marketConfigs.map((m) => m.name);
+    const marketAccounts = marketConfigs.map(
       (config: MarketConfig, i: number) => {
-        return this.configToMarket(
-          config,
-          allMarketAccountInfos[i].accountInfo
-        );
+        return this.configToMarket(config, marketAccountInfos[i].accountInfo);
       }
     );
-    return zipDict(
-      allMarketPks.map((pk) => pk.toBase58()),
-      allMarketAccounts
-    );
+    return zipDict(marketNames, marketAccounts);
   }
 
   private configToMarket(
@@ -249,7 +269,7 @@ class Mango {
       market: {
         account: market,
         config: <MarketConfig>(
-          getMarketByPublicKey(this.mangoGroupConfig, market.publicKey)
+          getMarketConfigByPublicKey(this.mangoGroupConfig, market.publicKey)
         ),
       },
       bids: await market
@@ -279,35 +299,31 @@ class Mango {
 
   // orders
 
-  public async fetchOrdersFromAccount(
-    mangoAccount: MangoAccount,
-    refresh: boolean = false
+  /**
+   * Returns an array of arrays, the first index
+   * @param marketConfigs
+   */
+  public async fetchOrders(
+    marketConfigs?: MarketConfig[]
   ): Promise<OrderInfo[][]> {
-    if (refresh) {
-      await mangoAccount.loadOpenOrders(
-        this.solana.connection,
-        this.mangoGroup().dexProgramId
-      );
+    if (marketConfigs === undefined) {
+      marketConfigs = this.getAllMarketConfigs();
     }
-    let allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
 
-    const allBidsAndAsksPks = allMarketConfigs
-      .map((m) => [m.bidsKey, m.asksKey])
-      .flat();
-    const allBidsAndAsksAccountInfos = await getMultipleAccounts(
+    const bidsAndAsksAccountInfos = await getMultipleAccounts(
       this.solana.connection,
-      allBidsAndAsksPks
+      marketConfigs.map((m) => [m.bidsKey, m.asksKey]).flat()
     );
 
     const accountInfos: { [key: string]: AccountInfo<Buffer> } = {};
-    allBidsAndAsksAccountInfos.forEach(({ publicKey, accountInfo }) => {
+    bidsAndAsksAccountInfos.forEach(({ publicKey, accountInfo }) => {
       accountInfos[publicKey.toBase58()] = accountInfo;
     });
 
-    const markets = await this.fetchAllMarkets();
+    const markets = await this.fetchMarkets();
 
-    return Object.entries(markets).map(([address, market]) => {
-      const marketConfig = getMarketByPublicKey(this.mangoGroupConfig, address);
+    return Object.entries(markets).map(([name, market]) => {
+      const marketConfig = this.getMarketConfigByName(name);
       if (marketConfig) {
         if (market instanceof Market) {
           return this.parseSpotOrders(market, marketConfig, accountInfos);
@@ -317,7 +333,7 @@ class Mango {
           throw new Error(`Invalid market type: ${typeof market}`);
         }
       } else {
-        throw new Error(`Unknown market public key: ${address}`);
+        throw new Error(`Unknown market name: ${name}`);
       }
     });
   }
@@ -331,13 +347,37 @@ class Mango {
     return spotOpenOrdersAccount ? spotOpenOrdersAccount.publicKey : null;
   }
 
+  public async fetchMostRecentPrice(
+    market: Market | PerpMarket
+  ): Promise<FilledOrder> {
+    const fillEvent = (await market.loadFills(this.solana.connection, 1))[0];
+    return Mango.parseFilledOrder(market, fillEvent);
+  }
+
+  private static parseFilledOrder(
+    market: Market | PerpMarket,
+    fillEvent: any
+  ): FilledOrder {
+    return {
+      fee: market instanceof Market ? fillEvent.feeCost : fillEvent.fee,
+      orderId: fillEvent.orderId,
+      clientOrderId: fillEvent.clientOrderId,
+      price: fillEvent.price,
+      side: market instanceof Market ? fillEvent.side : fillEvent.takerSide,
+      size: market instanceof Market ? fillEvent.size : fillEvent.quantity,
+      timestamp: Date.now().toString(),
+    };
+  }
+
   /**
    * Fetches all recent fills for given MangoAccount
    * @param mangoAccount User's mango account
    */
-  public async fetchAllSpotFills(mangoAccount: MangoAccount): Promise<any[]> {
-    const allMarketConfigs = getAllMarkets(this.mangoGroupConfig);
-    const allMarkets = await this.fetchAllMarkets();
+  public async fetchAllSpotFills(
+    mangoAccount: MangoAccount
+  ): Promise<FilledOrder[]> {
+    const allMarketConfigs = this.getAllMarketConfigs();
+    const allMarkets = await this.fetchMarkets();
 
     // merge
     // 1. latest fills from on-chain
@@ -361,10 +401,7 @@ class Mango {
             responseJson?.data ? responseJson.data : []
           );
 
-        // @ts-ignore
-        const recentMangoAccountSpotFills: any[] = await allMarkets[
-          config.publicKey.toBase58()
-        ]
+        const recentMangoAccountSpotFills: any[] = await allMarkets[config.name]
           .loadFills(this.solana.connection, 10000)
           .then((fills) => {
             fills = fills.filter((fill) => {
@@ -391,11 +428,18 @@ class Mango {
         })
     );
 
-    return [...newMangoAccountSpotFills, ...allButRecentMangoAccountSpotFills];
+    return [
+      ...newMangoAccountSpotFills,
+      ...allButRecentMangoAccountSpotFills,
+    ].map((fill) => {
+      return Mango.parseFilledOrder(allMarkets[fill.marketName], fill);
+    });
   }
 
-  public async fetchAllPerpFills(mangoAccount: MangoAccount): Promise<any[]> {
-    const allMarkets = await this.fetchAllMarkets();
+  public async fetchAllPerpFills(
+    mangoAccount: MangoAccount
+  ): Promise<FilledOrder[]> {
+    const allMarkets = await this.fetchMarkets();
 
     // merge
     // 1. latest fills from on-chain
@@ -408,10 +452,7 @@ class Mango {
     const allButRecentMangoAccountPerpFills = responseJson?.data || [];
     for (const config of this.getAllMarketConfigs()) {
       if (config.kind === 'perp') {
-        // @ts-ignore
-        const recentMangoAccountPerpFills: any[] = await allMarkets[
-          config.publicKey.toBase58()
-        ]
+        const recentMangoAccountPerpFills: any[] = await allMarkets[config.name]
           .loadFills(this.solana.connection)
           .then((fills) => {
             fills = fills.filter(
@@ -439,12 +480,17 @@ class Mango {
         })
     );
 
-    return [...newMangoAccountPerpFills, ...allButRecentMangoAccountPerpFills];
+    return [
+      ...newMangoAccountPerpFills,
+      ...allButRecentMangoAccountPerpFills,
+    ].map((fill) => {
+      return Mango.parseFilledOrder(allMarkets[fill.marketName], fill);
+    });
   }
 
   public async placeOrder(
     mangoAccount: MangoAccount,
-    market: MarketConfig,
+    market: Market | PerpMarket,
     side: 'buy' | 'sell',
     quantity: number,
     price?: number,
@@ -452,21 +498,15 @@ class Mango {
     clientOrderId?: number
   ): Promise<TransactionSignature> {
     const owner = await this.getOwner(mangoAccount);
-    if (market.kind === 'perp') {
-      const perpMarket = await this.mangoGroup().loadPerpMarket(
-        this.solana.connection,
-        market.marketIndex,
-        market.baseDecimals,
-        market.quoteDecimals
-      );
+    if (market instanceof PerpMarket) {
       // TODO: this is a workaround, mango-v3 has a assertion for price>0 for all order types
       // this will be removed soon hopefully
       price = orderType !== 'market' ? price : 1;
-      return await this.client.placePerpOrde(
+      return await this.client.placePerpOrder(
         this.mangoGroup(),
         mangoAccount,
         this.mangoGroup().mangoCache,
-        perpMarket,
+        market,
         owner,
         side,
         <number>price,
@@ -476,24 +516,16 @@ class Mango {
       );
     } else {
       // serum doesn't really support market orders, calculate a pseudo market price
-      const spotMarket = await Market.load(
-        this.solana.connection,
-        market.publicKey,
-        undefined,
-        this.mangoGroupConfig.serumProgramId
-      );
-
       price =
         orderType !== 'market'
           ? price
-          : await this.calculateMarketOrderPrice(spotMarket, quantity, side);
+          : await this.calculateMarketOrderPrice(market, quantity, side);
 
       return await this.client.placeSpotOrder(
         this.mangoGroup(),
         mangoAccount,
         this.mangoGroup().mangoCache,
-        // @ts-ignore
-        spotMarket,
+        market,
         owner,
         side,
         price,
@@ -532,16 +564,18 @@ class Mango {
     }
   }
 
-  public async cancelAllOrders(mangoAccount: MangoAccount): Promise<void> {
-    const allMarkets = await this.fetchAllMarkets();
-    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
-
+  public async cancelAllOrders(
+    mangoAccount: MangoAccount,
+    markets?: Record<string, Market | PerpMarket>
+  ): Promise<void> {
+    const tempMarkets = markets ?? (await this.fetchMarkets());
+    const orders = (await this.fetchOrders()).flat();
     const transactions = await Promise.all(
       orders.map((orderInfo) =>
         this.buildCancelOrderTransaction(
           mangoAccount,
           orderInfo,
-          allMarkets[orderInfo.market.account.publicKey.toBase58()]
+          tempMarkets[orderInfo.market.config.name]
         )
       )
     );
@@ -581,7 +615,7 @@ class Mango {
   ): Promise<TransactionSignature> {
     const owner = await this.getOwner(mangoAccount);
     if (orderInfo.market.config.kind === 'perp') {
-      const perpMarketConfig = getMarketByBaseSymbolAndKind(
+      const perpMarketConfig = getMarketConfigByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
         'perp'
@@ -602,7 +636,7 @@ class Mango {
         orderInfo.order as PerpOrder
       );
     } else {
-      const spotMarketConfig = getMarketByBaseSymbolAndKind(
+      const spotMarketConfig = getMarketConfigByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
         'spot'
@@ -619,7 +653,6 @@ class Mango {
         this.mangoGroup(),
         mangoAccount,
         owner,
-        // @ts-ignore
         market as Market,
         orderInfo.order as SimpleOrder
       );
@@ -633,7 +666,7 @@ class Mango {
   ): Promise<Transaction> {
     const owner = await this.getOwner(mangoAccount);
     if (orderInfo.market.config.kind === 'perp') {
-      const perpMarketConfig = getMarketByBaseSymbolAndKind(
+      const perpMarketConfig = getMarketConfigByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
         'perp'
@@ -654,7 +687,7 @@ class Mango {
         orderInfo.order as PerpOrder
       );
     } else {
-      const spotMarketConfig = getMarketByBaseSymbolAndKind(
+      const spotMarketConfig = getMarketConfigByBaseSymbolAndKind(
         this.mangoGroupConfig,
         orderInfo.market.config.baseSymbol,
         'spot'
@@ -677,21 +710,15 @@ class Mango {
     }
   }
 
-  public async getOrderByOrderId(
-    mangoAccount: MangoAccount,
-    orderId: string
-  ): Promise<OrderInfo[]> {
-    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
+  public async getOrderByOrderId(orderId: string): Promise<OrderInfo[]> {
+    const orders = (await this.fetchOrders()).flat();
     return orders.filter(
       (orderInfo) => orderInfo.order.orderId.toString() === orderId
     );
   }
 
-  public async getOrderByClientId(
-    mangoAccount: MangoAccount,
-    clientId: string
-  ): Promise<OrderInfo[]> {
-    const orders = (await this.fetchOrdersFromAccount(mangoAccount)).flat();
+  public async getOrderByClientId(clientId: string): Promise<OrderInfo[]> {
+    const orders = (await this.fetchOrders()).flat();
     return orders.filter(
       (orderInfo) =>
         orderInfo.order.clientId?.toNumber().toString() === clientId
@@ -861,7 +888,6 @@ class Mango {
       throw new Error('Invalid or missing node banks');
     }
 
-    // todo what is a makeSettleFundsInstruction?
     const settleFundsInstruction = makeSettleFundsInstruction(
       this.mangoGroupConfig.mangoProgramId,
       mangoGroup.publicKey,

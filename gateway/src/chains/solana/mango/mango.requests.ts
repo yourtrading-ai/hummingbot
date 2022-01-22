@@ -1,7 +1,7 @@
 //
 // GET /accounts
 //
-import { Fill, OpenOrder, SimpleOrder } from './mango.types';
+import { FilledOrder, OpenOrder, SimpleOrder } from './mango.types';
 
 interface BalanceRecord {
   marketName: string;
@@ -54,7 +54,6 @@ interface FeeInfo {
 
 interface Market {
   name: string;
-  latestTradedPrice: string;
   indexPrice: string; // oracle price of the underlying base asset (also used for liquidations)
   minimumOrderSize: string; // smallest allowed order size
   tickSize: string; // smallest possible price increment
@@ -66,7 +65,7 @@ interface SpotMarket extends Market {
 }
 
 interface PerpMarket extends Market {
-  fundingRate: number; // hourly APR, positive if long pays short, negative if otherwise
+  //fundingRate: number; // hourly APR, positive if long pays short, negative if otherwise
   baseLotSize: string; // smallest increment for the base (asset) amount
   quoteLotSize: string; // smallest possible change in quote (USD) amount
   openInterest: string; // the dollar volume of open positions
@@ -133,6 +132,6 @@ export interface MangoCancelOrderResponse {
 //
 export interface MangoFillsResponse {
   // sorted from newest to oldest
-  spot: Fill[];
-  perp: Fill[];
+  spot: FilledOrder[];
+  perp: FilledOrder[];
 }
