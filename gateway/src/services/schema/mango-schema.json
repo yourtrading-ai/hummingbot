@@ -7,10 +7,6 @@
     "ttl": { "type": "number" },
     "defaultMangoAccount": { "type": ["string", "null"] }
   },
-  "required": [
-    "allowedSlippage",
-    "groupName",
-    "ttl"
-  ],
+  "required": ["allowedSlippage", "groupName", "ttl"],
   "additionalProperties": false
 }

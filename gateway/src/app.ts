@@ -18,7 +18,7 @@ import {
 import { ConfigManagerV2 } from './services/config-manager-v2';
 import { SwaggerManager } from './services/swagger-manager';
 import { EthereumBase } from './services/ethereum-base';
-import {MangoRoutes} from "./chains/solana/mango/mango.routes";
+import { MangoRoutes } from './chains/solana/mango/mango.routes';
 
 const swaggerUi = require('swagger-ui-express');
 

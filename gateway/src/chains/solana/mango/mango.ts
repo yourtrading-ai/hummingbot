@@ -23,7 +23,7 @@ import {
   TokenInfo,
 } from '@blockworks-foundation/mango-client';
 import { Market, Orderbook } from '@project-serum/serum';
-//import { Order } from "@project-serum/serum/lib/market";
+import { Order as SpotOrder } from '@project-serum/serum/lib/market';
 import {
   Account,
   AccountInfo,
@@ -31,7 +31,6 @@ import {
   Transaction,
   TransactionSignature,
 } from '@solana/web3.js';
-//import BN from "bn.js";
 import { logger } from '../../../services/logger';
 import { zipDict } from '../../../services/base';
 import { Solana } from '../solana';
@@ -42,7 +41,6 @@ import {
   SERVICE_UNITIALIZED_ERROR_MESSAGE,
 } from '../../../services/error-handler';
 import { FilledOrder, OrderBook, OrderInfo, SimpleOrder } from './mango.types';
-import { Order as SpotOrder } from '@project-serum/serum/lib/market';
 import BN from 'bn.js';
 
 class Mango {
@@ -528,7 +526,7 @@ class Mango {
         market,
         owner,
         side,
-        price,
+        <number>price,
         quantity,
         orderType === 'market' ? 'limit' : orderType,
         new BN(<number>clientOrderId)
@@ -654,7 +652,7 @@ class Mango {
         mangoAccount,
         owner,
         market as Market,
-        orderInfo.order as SimpleOrder
+        <SpotOrder>orderInfo.order
       );
     }
   }
