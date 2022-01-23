@@ -2,11 +2,13 @@
 # execution price. It uses a rational number for precision.
 allowedSlippage: '2/100'
 
-# the maximum gas allowed for a uniswap trade.
-groupName: 'mainnet.1'
+# the group (or rather initialized market) to select for trading on given solana network
+groupNames:
+  mainnet-beta: 'mainnet.1'
+  devnet: 'devnet.2'
 
 # After how long a transaction times out
-ttl: 10
+ttl: 75
 
 # allows defining the exact mango account address, in case the user owns multiple mango accounts
 defaultMangoAccount:

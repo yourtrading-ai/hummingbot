@@ -58,7 +58,6 @@ class Mango {
     this.mangoGroupConfig = Config.ids().groups.filter(
       (group) => group.name === MangoConfig.config.groupName
     )[0];
-
     this.client = new MangoClient(
       this.solana.connection,
       this.mangoGroupConfig.mangoProgramId
@@ -76,13 +75,11 @@ class Mango {
   }
 
   public async init() {
-    if (!Solana.getInstance().ready())
-      throw new InitializationError(
-        SERVICE_UNITIALIZED_ERROR_MESSAGE('SOL'),
-        SERVICE_UNITIALIZED_ERROR_CODE
-      );
-
+    if (!Solana.getInstance().ready()) {
+      await Solana.getInstance().init();
+    }
     logger.info(`- fetching mango group`);
+    console.log(this.mangoGroupConfig.publicKey.toBase58());
     this._mangoGroup = await this.client.getMangoGroup(
       this.mangoGroupConfig.publicKey
     );

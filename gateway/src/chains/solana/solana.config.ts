@@ -20,7 +20,7 @@ export namespace SolanaConfig {
 
 export function getSolanaConfig(chainName: string): Config {
   const configManager = ConfigManagerV2.getInstance();
-  const network = ConfigManagerV2.getInstance().get(chainName + '.network');
+  const network = configManager.get(chainName + '.network');
   return {
     network: {
       slug: network,

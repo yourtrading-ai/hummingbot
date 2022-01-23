@@ -3,10 +3,16 @@
   "type": "object",
   "properties": {
     "allowedSlippage": { "type": "string" },
-    "groupName": { "type": "string" },
+    "groupNames": {
+      "type": "object",
+      "patternProperties": {
+        "^..+$": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "ttl": { "type": "number" },
     "defaultMangoAccount": { "type": ["string", "null"] }
   },
-  "required": ["allowedSlippage", "groupName", "ttl"],
+  "required": ["allowedSlippage", "groupNames", "ttl"],
   "additionalProperties": false
 }

@@ -5,7 +5,7 @@ networks:
     rpcURL: https://api.testnet.solana.com
   devnet:
     rpcURL: https://api.devnet.solana.com
-network: testnet
+network: devnet
 nativeCurrencySymbol: SOL
 tokenProgram: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 transactionLamports: 5000
