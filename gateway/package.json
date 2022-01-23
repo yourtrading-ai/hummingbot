@@ -16,11 +16,12 @@
     "start": "nodemon dist/src/index.js",
     "copy-files": "copyfiles -a 'src/**/schema/*.json' 'src/templates/*.yml' 'test/services/data/**/*.*' dist",
     "test:unit": "jest --verbose --forceExit ./test/",
+    "test:solana": "jest --verbose --forceExit ./test/chains/solana/",
     "test:cov": "jest --coverage --forceExit ./test/",
     "test:scripts": "jest -i --verbose ./test-scripts/*.test.ts"
   },
   "dependencies": {
-    "@blockworks-foundation/mango-client": "^3.2.14",
+    "@blockworks-foundation/mango-client": "^3.3.5",
     "@ethersproject/experimental": "^5.3.0",
     "@pangolindex/sdk": "^1.1.0",
     "@project-serum/serum": "0.13.55",
@@ -51,6 +52,7 @@
     "level": "^7.0.1",
     "level-party": "^5.1.1",
     "lodash": "^4.17.21",
+    "readable-stream": "^3.6.0",
     "swagger-ui-express": "^4.1.6",
     "winston": "^3.3.3",
     "winston-daily-rotate-file": "^4.5.5"
