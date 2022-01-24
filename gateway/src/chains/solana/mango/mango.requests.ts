@@ -38,7 +38,7 @@ export interface MangoAccountsResponse {
 // GET /markets
 //
 export interface MangoMarketsRequest {
-  marketNames: string[];
+  marketNames?: string[];
 }
 
 interface FeeInfo {
@@ -75,6 +75,19 @@ export interface MangoMarketsResponse {
   fees: FeeInfo;
   spot: SpotMarket[];
   perp: PerpMarket[];
+}
+
+//
+// GET /ticker
+//
+export interface TickerItem {
+  marketName: string;
+  price: string;
+  timestamp: string;
+}
+
+export interface MangoTickerResponse {
+  lastTradedPrices: TickerItem[];
 }
 
 //

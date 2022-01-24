@@ -18,6 +18,7 @@ import {
   MangoPostOrderResponse,
   MangoCancelOrderRequest,
   MangoCancelOrderResponse,
+  MangoTickerResponse,
 } from './mango.requests';
 import {
   accounts,
@@ -81,7 +82,7 @@ export namespace MangoRoutes {
     asyncHandler(
       async (
         req: Request<unknown, unknown, MangoMarketsRequest>,
-        res: Response<MangoMarketsResponse, any>
+        res: Response<MangoTickerResponse, any>
       ) => {
         res.status(200).json(await markets(req.body));
       }
