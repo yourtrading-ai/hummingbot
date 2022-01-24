@@ -118,7 +118,7 @@ class GatewayBase(ConnectorBase):
         Calls the base endpoint of the connector on Gateway to know basic info about chain being used.
         """
         try:
-            resp = await self._api_request("get", f"{self.base_path}/")
+            resp = await self._api_request("get", f"{self.network_base_path}/")
             if bool(str(resp["success"])):
                 self._chain_info = resp
         except asyncio.CancelledError:
