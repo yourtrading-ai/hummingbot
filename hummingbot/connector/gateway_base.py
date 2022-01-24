@@ -24,6 +24,39 @@ s_decimal_NaN = Decimal("nan")
 logging.basicConfig(level=METRICS_LOG_LEVEL)
 
 
+GATEWAY_BASE_URL = f"https://{global_config_map['gateway_api_host'].value}:"\
+                   f"{global_config_map['gateway_api_port'].value}"
+
+
+async def get_gateway_client() -> aiohttp.ClientSession:
+    ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
+    ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
+    conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
+    return aiohttp.ClientSession(connector=conn)
+
+
+async def gateway_get_request(path_url: str, params: Dict[str, Any] = {}) -> Dict[str, Any]:
+    url = f"{GATEWAY_BASE_URL}/{path_url}"
+    client = await get_gateway_client()
+    response = await client.get(url, params=params)
+
+    return await parse_gateway_response(response, url)
+
+
+async def parse_gateway_response(response: aiohttp.ClientResponse, url: str) -> Dict[str, Any]:
+    parsed_response = json.loads(await response.text())
+    if response.status != 200:
+        err_msg = ""
+        if "error" in parsed_response:
+            err_msg = f" Message: {parsed_response['error']}"
+        elif "message" in parsed_response:
+            err_msg = f" Message: {parsed_response['message']}"
+        raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.{err_msg}")
+    if "error" in parsed_response:
+        raise Exception(f"Error: {parsed_response['error']} {parsed_response['message']}")
+    return parsed_response
+
+
 class GatewayBase(ConnectorBase):
     """
     Defines basic functions common to connectors that interact with DEXes through Gateway.
@@ -231,10 +264,7 @@ class GatewayBase(ConnectorBase):
         :returns Shared client session instance
         """
         if self._shared_client is None:
-            ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
-            ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
-            conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
-            self._shared_client = aiohttp.ClientSession(connector=conn)
+            self._shared_client = await get_gateway_client()
         return self._shared_client
 
     async def _api_request(self,
@@ -243,35 +273,25 @@ class GatewayBase(ConnectorBase):
                            params: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Sends an aiohttp request and waits for a response.
-        :param method: The HTTP method, e.g. get or post
+        :param method: The HTTP method, e.g. get, post, delete or put
         :param path_url: The path url or the API end point
         :param params: A dictionary of required params for the end point
         :returns A response in json format.
         """
-        base_url = f"https://{global_config_map['gateway_api_host'].value}:" \
-                   f"{global_config_map['gateway_api_port'].value}"
-        url = f"{base_url}/{path_url}"
+        url = f"{GATEWAY_BASE_URL}/{path_url}"
         client = await self._http_client()
         if method == "get":
             if len(params) > 0:
                 response = await client.get(url, params=params)
             else:
                 response = await client.get(url)
-        elif method == "post":
+        elif method in ["post", "delete", "put"]:
             params["privateKey"] = self.private_key
             response = await client.post(url, json=params)
-        parsed_response = json.loads(await response.text())
-        if response.status != 200:
-            err_msg = ""
-            if "error" in parsed_response:
-                err_msg = f" Message: {parsed_response['error']}"
-            elif "message" in parsed_response:
-                err_msg = f" Message: {parsed_response['message']}"
-            raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.{err_msg}")
-        if "error" in parsed_response:
-            raise Exception(f"Error: {parsed_response['error']} {parsed_response['message']}")
+        else:
+            raise Exception(f"Invalid method type '{method}'")
 
-        return parsed_response
+        return await parse_gateway_response(response, url)
 
     @property
     def in_flight_orders(self) -> Dict[str, InFlightOrderBase]:
