@@ -46,23 +46,22 @@ export type OrderBook = {
  */
 export interface SimpleOrder {
   price: number;
-  size: number;
+  amount: number;
 }
 
 /**
- * Represents an open maker order.
+ * Represents a client's order with IDs and their side.
  */
-export interface OpenOrder extends SimpleOrder {
+export interface OpenClientOrder extends SimpleOrder {
   orderId: string;
-  clientOrderId: string;
+  clientOrderId?: string;
   side: 'buy' | 'sell';
 }
 
 /**
- * Represents a filled taker order.
+ * Represents a filled order.
  */
-export interface FilledOrder extends OpenOrder {
-  //filled: string - represents now how much has been filled at given timestamp
+export interface FilledOrder extends OpenClientOrder {
   timestamp: string; // the time at which the fill happened
   fee: string; // can be positive, when paying, or negative, when rebated
 }

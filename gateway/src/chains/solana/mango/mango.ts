@@ -274,7 +274,7 @@ class Mango {
           l2.map<SimpleOrder>((order) => {
             return {
               price: order[0],
-              size: order[1],
+              amount: order[1],
             };
           })
         ),
@@ -285,7 +285,7 @@ class Mango {
           l2.map<SimpleOrder>((order) => {
             return {
               price: order[0],
-              size: order[1],
+              amount: order[1],
             };
           })
         ),
@@ -359,7 +359,7 @@ class Mango {
       clientOrderId: fillEvent.clientOrderId,
       price: fillEvent.price,
       side: market instanceof Market ? fillEvent.side : fillEvent.takerSide,
-      size: market instanceof Market ? fillEvent.size : fillEvent.quantity,
+      amount: market instanceof Market ? fillEvent.size : fillEvent.quantity,
       timestamp: Date.now().toString(),
     };
   }
@@ -543,7 +543,7 @@ class Mango {
     let acc = 0;
     let selectedOrder;
     for (const order of orders) {
-      acc += order.size;
+      acc += order.amount;
       if (acc >= quantity) {
         selectedOrder = order;
         break;

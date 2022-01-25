@@ -1,7 +1,7 @@
 //
 // GET /accounts
 //
-import { FilledOrder, OpenOrder, SimpleOrder } from './mango.types';
+import { FilledOrder, OpenClientOrder, SimpleOrder } from './mango.types';
 
 interface BalanceRecord {
   marketName: string;
@@ -98,6 +98,7 @@ export interface MangoOrderbookRequest {
 }
 
 export interface MangoOrderbookResponse {
+  marketName: string;
   bids: SimpleOrder[];
   asks: SimpleOrder[];
 }
@@ -105,9 +106,15 @@ export interface MangoOrderbookResponse {
 //
 // GET /orders
 //
+export interface MangoGetOrdersRequest {
+  address?: string; // filter by owner
+  marketName?: string; // filter by market (can speed up request dramatically)
+  exchangeOrderId?: string; // filter by exchangeOrderId
+  clientOrderId?: string; // filter by clientOrderId
+}
 export interface MangoGetOrdersResponse {
-  spot: OpenOrder[];
-  perp: OpenOrder[];
+  spot: OpenClientOrder[];
+  perp: OpenClientOrder[];
 }
 
 //
@@ -119,13 +126,15 @@ export interface MangoPostOrderRequest {
   side: 'buy' | 'sell';
   amount: string;
   price: string;
-  order_type: 'limit' | 'market'; // market == ioc
+  order_type: 'limit' | 'market'; // market == ioc (immediate-or-cancel)
   postOnly: boolean; // place only an order, if no liquidity has been taken
+  clientOrderId?: string; // set a client's own orderId for tracking
 }
 
-export interface MangoPostOrderResponse {
-  status: 'open' | 'filled' | 'cancelled';
-  orderId?: string;
+export interface MangoOrderResponse {
+  status: 'open' | 'filled' | 'cancelled' | 'rejected' | 'unknown';
+  exchangeOrderId?: string;
+  clientOrderId?: string;
 }
 
 //
@@ -133,11 +142,12 @@ export interface MangoPostOrderResponse {
 //
 export interface MangoCancelOrderRequest {
   address: string;
-  orderId?: string;
+  exchangeOrderId?: string; // is simply 'orderId' in mango.ts
+  clientOrderId?: string;
 }
 
-export interface MangoCancelOrderResponse {
-  orderIds: string[]; // IDs of the successfully cancelled orders
+export interface MangoCancelOrdersResponse {
+  orders: MangoOrderResponse;
 }
 
 //

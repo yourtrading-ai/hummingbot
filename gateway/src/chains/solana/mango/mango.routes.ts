@@ -15,10 +15,11 @@ import {
   MangoOrderbookResponse,
   MangoGetOrdersResponse,
   MangoPostOrderRequest,
-  MangoPostOrderResponse,
   MangoCancelOrderRequest,
-  MangoCancelOrderResponse,
   MangoTickerResponse,
+  MangoCancelOrdersResponse,
+  MangoOrderResponse,
+  MangoGetOrdersRequest,
 } from './mango.requests';
 import {
   accounts,
@@ -106,7 +107,7 @@ export namespace MangoRoutes {
     '/orders',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, { address: string }>,
+        req: Request<unknown, unknown, MangoGetOrdersRequest>,
         res: Response<MangoGetOrdersResponse, any>
       ) => {
         validatePublicKey(req.body);
@@ -120,7 +121,7 @@ export namespace MangoRoutes {
     asyncHandler(
       async (
         req: Request<unknown, unknown, MangoPostOrderRequest>,
-        res: Response<MangoPostOrderResponse, any>
+        res: Response<MangoOrderResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await postOrder(req.body));
@@ -133,7 +134,7 @@ export namespace MangoRoutes {
     asyncHandler(
       async (
         req: Request<unknown, unknown, MangoCancelOrderRequest>,
-        res: Response<MangoCancelOrderResponse, any>
+        res: Response<MangoCancelOrdersResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await deleteOrders(req.body));
