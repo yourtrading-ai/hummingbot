@@ -31,7 +31,7 @@ interface MangoSpotAccount {
 }
 
 export interface MangoAccountsResponse {
-  accounts: MangoSpotAccount[];
+  mangoAccounts: MangoSpotAccount[];
 }
 
 //
@@ -112,6 +112,7 @@ export interface MangoGetOrdersRequest {
   exchangeOrderId?: string; // filter by exchangeOrderId
   clientOrderId?: string; // filter by clientOrderId
 }
+
 export interface MangoGetOrdersResponse {
   spot: OpenClientOrder[];
   perp: OpenClientOrder[];
@@ -121,7 +122,7 @@ export interface MangoGetOrdersResponse {
 // POST /orders
 //
 export interface MangoPostOrderRequest {
-  address: string;
+  mangoAccountAddress: string;
   marketName: string;
   side: 'buy' | 'sell';
   amount: string;
@@ -132,7 +133,7 @@ export interface MangoPostOrderRequest {
 }
 
 export interface MangoOrderResponse {
-  status: 'open' | 'filled' | 'cancelled' | 'rejected' | 'unknown';
+  status: 'open' | 'filled' | 'cancelled' | 'unknown';
   exchangeOrderId?: string;
   clientOrderId?: string;
 }
@@ -141,7 +142,7 @@ export interface MangoOrderResponse {
 // DELETE /orders
 //
 export interface MangoCancelOrderRequest {
-  address: string;
+  mangoAccountAddress: string; // mango account, which orders belong to
   exchangeOrderId?: string; // is simply 'orderId' in mango.ts
   clientOrderId?: string;
 }

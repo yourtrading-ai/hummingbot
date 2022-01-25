@@ -146,7 +146,7 @@ export namespace MangoRoutes {
     '/fills',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, { address: string }>,
+        req: Request<unknown, unknown, { mangoAccountAddress: string }>,
         res: Response<MangoFillsResponse, any>
       ) => {
         validatePublicKey(req.body);
