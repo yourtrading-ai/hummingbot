@@ -267,6 +267,14 @@ class GatewayBase(ConnectorBase):
             self._shared_client = await get_gateway_client()
         return self._shared_client
 
+    # TODO: Rename old self._api_request to prevent doubled signatures
+    #   (this is a workaround due to untracked dependencies on the old signatures)
+    async def api_request(self,
+                          method: str,
+                          path_url: str,
+                          params: Dict[str, Any] = {}) -> Dict[str, Any]:
+        return await self._api_request(method, path_url, params)
+
     async def _api_request(self,
                            method: str,
                            path_url: str,
