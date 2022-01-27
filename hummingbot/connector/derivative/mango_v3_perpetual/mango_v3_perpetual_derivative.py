@@ -1,8 +1,17 @@
+import logging
 from datetime import time
 from decimal import Decimal
 from typing import List, Optional, Dict
 
 from hummingbot.connector.trading_rule import TradingRule
+from hummingbot.core.data_type.transaction_tracker import TransactionTracker
+
+from hummingbot.connector.derivative.mango_v3_perpetual.mango_v3_perpetual_constants import EXCHANGE_NAME, MARKETS_URL, \
+    ORDERS_URL, ACCOUNTS_URL
+from hummingbot.connector.derivative.mango_v3_perpetual.mango_v3_perpetual_order_book_tracker import \
+    MangoV3PerpetualOrderBookTracker
+from hummingbot.logger import HummingbotLogger
+
 from hummingbot.core.utils.async_utils import safe_ensure_future
 
 from hummingbot.connector.gateway_base import gateway_get_request
@@ -22,7 +31,24 @@ def now():
     return int(time.time()) * 1000
 
 
+class MangoV3PerpetualDerivativeTransactionTracker(TransactionTracker):
+    def __init__(self, owner):
+        super().__init__()
+        self._owner = owner
+
+    def did_timeout_tx(self, tx_id: str):
+        TransactionTracker.c_did_timeout_tx(self, tx_id)
+        self._owner.did_timeout_tx(tx_id)
+
+
 class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
+    @classmethod
+    def logger(cls) -> HummingbotLogger:
+        global s_logger
+        if s_logger is None:
+            s_logger = logging.getLogger(__name__)
+        return s_logger
+
     def __init__(
             self,
             solana_wallet_private_key: str,
@@ -32,14 +58,16 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
     ):
         SolanaBase.__init__(self, trading_pairs, solana_wallet_private_key, trading_required)
         PerpetualTrading.__init__(self)
-
         if mango_account_address:
             self._mango_account_address = mango_account_address
         else:
-            response = await gateway_get_request(f"{self.network_base_path}/{self.base_path}/accounts")
+            response = await gateway_get_request(f"{self.network_base_path}/{self.base_path}{ACCOUNTS_URL}")
             if len(response['mangoAccounts']) > 0:
                 # TODO: Let user specify which to use
                 self._mango_account_address = response['mangoAccounts'][0]['publicKey']
+
+        self._tx_tracker = MangoV3PerpetualDerivativeTransactionTracker(self)
+        self._order_book_tracker = MangoV3PerpetualOrderBookTracker(trading_pairs=trading_pairs)
 
     @property
     def base_path(self):
@@ -47,12 +75,12 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
 
     @staticmethod
     async def fetch_trading_pairs(self: 'MangoV3PerpetualDerivative') -> List[str]:
-        response = await gateway_get_request(f"{self.base_path}/markets")
+        response = await gateway_get_request(f"{self.base_path}{MARKETS_URL}")
         return [market['name'] for market in response['perp']]
 
     async def get_order(self, client_order_id: str, trading_pair: str = None):
         response = await self.api_request('get',
-                                          f"{self.base_path}/orders",
+                                          f"{self.base_path}{ORDERS_URL}",
                                           {
                                               'account': self._mango_account_address,
                                               'clientOrderId': client_order_id,
@@ -63,7 +91,7 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
 
     async def get_orders(self, trading_pair: str) -> List[Dict[str, str]]:
         response = await self.api_request('get',
-                                          f"{self.base_path}/orders",
+                                          f"{self.base_path}{ORDERS_URL}",
                                           {
                                               'marketName': trading_pair,
                                               'mangoAccountAddress': self._mango_account_address
@@ -83,7 +111,7 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
             return False
 
         try:
-            response = await self.api_request('delete', f"{self.base_path}/orders",
+            response = await self.api_request('delete', f"{self.base_path}{ORDERS_URL}",
                                               {'clientOrderId': client_order_id})
             for order in response['orders']:
                 if order['clientOrderId'] == client_order_id:
@@ -95,7 +123,7 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
                         return False
                     elif order['status'] == 'filled':
                         response = await self.api_request('get',
-                                                          f"{self.base_path}/orders",
+                                                          f"{self.base_path}{ORDERS_URL}",
                                                           {
                                                               'account': self._mango_account_address,
                                                               'clientOrderId': client_order_id,
@@ -128,7 +156,7 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
 
     @property
     def name(self):
-        return 'mango-v3'
+        return EXCHANGE_NAME
 
     def get_buy_collateral_token(self, trading_pair: str) -> str:
         # TODO: Implement _trading_rules
