@@ -53,15 +53,16 @@ export interface SimpleOrder {
  * Represents a client's order with IDs and their side.
  */
 export interface OpenClientOrder extends SimpleOrder {
-  orderId: string;
+  exchangeOrderId: string;
   clientOrderId?: string;
-  side: 'buy' | 'sell';
+  side: 'BUY' | 'SELL';
 }
 
 /**
  * Represents a filled order.
  */
 export interface FilledOrder extends OpenClientOrder {
+  id: string; // should be seqNum from FillEvent
   timestamp: string; // the time at which the fill happened
   fee: string; // can be positive, when paying, or negative, when rebated
 }

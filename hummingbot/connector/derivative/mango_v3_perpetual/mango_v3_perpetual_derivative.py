@@ -3,13 +3,19 @@ from datetime import time
 from decimal import Decimal
 from typing import List, Optional, Dict
 
+from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.trading_rule import TradingRule
+from hummingbot.core.data_type.limit_order import LimitOrder
+from hummingbot.core.data_type.order_book import OrderBook
 from hummingbot.core.data_type.transaction_tracker import TransactionTracker
 
 from hummingbot.connector.derivative.mango_v3_perpetual.mango_v3_perpetual_constants import EXCHANGE_NAME, MARKETS_URL, \
     ORDERS_URL, ACCOUNTS_URL
+from hummingbot.connector.derivative.mango_v3_perpetual.mango_v3_perpetual_in_flight_order import \
+    MangoV3PerpetualInFlightOrder
 from hummingbot.connector.derivative.mango_v3_perpetual.mango_v3_perpetual_order_book_tracker import \
     MangoV3PerpetualOrderBookTracker
+from hummingbot.connector.derivative.perpetual_budget_checker import PerpetualBudgetChecker
 from hummingbot.logger import HummingbotLogger
 
 from hummingbot.core.utils.async_utils import safe_ensure_future
@@ -19,7 +25,7 @@ from hummingbot.connector.perpetual_trading import PerpetualTrading
 from hummingbot.connector.solana_base import SolanaBase
 
 from hummingbot.core.event.events import (
-    PositionMode, OrderCancelledEvent, MarketEvent,
+    PositionMode, OrderCancelledEvent, MarketEvent, OrderType,
 )
 
 s_logger = None
@@ -41,7 +47,7 @@ class MangoV3PerpetualDerivativeTransactionTracker(TransactionTracker):
         self._owner.did_timeout_tx(tx_id)
 
 
-class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
+class MangoV3PerpetualDerivative(ExchangeBase, SolanaBase, PerpetualTrading):
     @classmethod
     def logger(cls) -> HummingbotLogger:
         global s_logger
@@ -66,17 +72,85 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
                 # TODO: Let user specify which to use
                 self._mango_account_address = response['mangoAccounts'][0]['publicKey']
 
-        self._tx_tracker = MangoV3PerpetualDerivativeTransactionTracker(self)
         self._order_book_tracker = MangoV3PerpetualOrderBookTracker(trading_pairs=trading_pairs)
+        self._tx_tracker = MangoV3PerpetualDerivativeTransactionTracker(self)
+        self._budget_checker = PerpetualBudgetChecker(self)
+        self._trading_rules = {}
+        self._in_flight_orders_by_exchange_id = {}
+
+    @property
+    def name(self):
+        return EXCHANGE_NAME
 
     @property
     def base_path(self):
         return f"{self.network_base_path}/mango"
 
+    @property
+    def status_dict(self) -> Dict[str, bool]:
+        return {
+            "order_books_initialized": len(self._order_book_tracker.order_books) > 0,
+            "account_balances": len(self._account_balances) > 0 if self._trading_required else True,
+            "trading_rule_initialized": len(self._trading_rules) > 0 if self._trading_required else True,
+            "funding_info_available": len(self._funding_info) > 0 if self._trading_required else True,
+
+        }
+
+    # ----------------------------------------
+    # Markets & Order Books
+
     @staticmethod
     async def fetch_trading_pairs(self: 'MangoV3PerpetualDerivative') -> List[str]:
         response = await gateway_get_request(f"{self.base_path}{MARKETS_URL}")
         return [market['name'] for market in response['perp']]
+
+    @property
+    def order_books(self) -> Dict[str, OrderBook]:
+        return self._order_book_tracker.order_books
+
+    def get_order_book(self, trading_pair: str):
+        order_books = self._order_book_tracker.order_books
+        if trading_pair not in order_books:
+            raise ValueError(f"No order book exists for '{trading_pair}'.")
+        return order_books[trading_pair]
+
+    @property
+    def limit_orders(self) -> List[LimitOrder]:
+        retval = []
+
+        for in_flight_order in self._in_flight_orders.values():
+            mango_v3_flight_order = in_flight_order
+            if mango_v3_flight_order.order_type in [OrderType.LIMIT, OrderType.LIMIT_MAKER]:
+                retval.append(mango_v3_flight_order.to_limit_order())
+        return retval
+
+    @property
+    def budget_checker(self) -> PerpetualBudgetChecker:
+        return self._budget_checker
+
+    # ----------------------------------------
+    # Account Balances
+
+    def get_balance(self, currency: str):
+        return self._account_balances.get(currency, Decimal(0))
+
+    def get_available_balance(self, currency: str):
+        return self._account_available_balances.get(currency, Decimal(0))
+
+    # ==========================================================
+    # Order Submission
+    # ----------------------------------------------------------
+
+    @property
+    def in_flight_orders(self) -> Dict[str, MangoV3PerpetualInFlightOrder]:
+        return self._in_flight_orders
+
+    def supported_order_types(self):
+        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
+
+    def _set_exchange_id(self, in_flight_order, exchange_order_id):
+        in_flight_order.update_exchange_order_id(exchange_order_id)
+        self._in_flight_orders_by_exchange_id[exchange_order_id] = in_flight_order
 
     async def get_order(self, client_order_id: str, trading_pair: str = None):
         response = await self.api_request('get',
@@ -153,10 +227,6 @@ class MangoV3PerpetualDerivative(SolanaBase, PerpetualTrading):
 
     def supported_position_modes(self) -> List[PositionMode]:
         pass
-
-    @property
-    def name(self):
-        return EXCHANGE_NAME
 
     def get_buy_collateral_token(self, trading_pair: str) -> str:
         # TODO: Implement _trading_rules

@@ -11,7 +11,7 @@ interface BalanceRecord {
 
 interface PerpPosition {
   marketName: string;
-  side: 'long' | 'short';
+  side: 'LONG' | 'SHORT';
   basePosition: string; // how much of the underlying asset (like BTC) has been longed/shorted
   quotePosition: string; // how much this position is worth (in USD)
   averageOpenPrice: string;
@@ -123,16 +123,16 @@ export interface MangoGetOrdersResponse {
 export interface MangoPostOrderRequest {
   mangoAccountAddress: string;
   marketName: string;
-  side: 'buy' | 'sell';
+  side: 'BUY' | 'SELL';
   amount: string;
   price: string;
-  order_type: 'limit' | 'market'; // market == ioc (immediate-or-cancel)
+  order_type: 'LIMIT' | 'MARKET'; // market == ioc (immediate-or-cancel)
   postOnly: boolean; // place only an order, if no liquidity has been taken
   clientOrderId?: string; // set a client's own orderId for tracking
 }
 
 export interface MangoOrderResponse {
-  status: 'open' | 'filled' | 'cancelled' | 'unknown';
+  status: 'OPEN' | 'FILLED' | 'CANCELED' | 'UNKNOWN' | 'FAILED' | 'DONE';
   exchangeOrderId?: string;
   clientOrderId?: string;
 }

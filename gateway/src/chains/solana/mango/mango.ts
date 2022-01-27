@@ -354,8 +354,9 @@ class Mango {
     fillEvent: any
   ): FilledOrder {
     return {
+      id: fillEvent.seqNum,
       fee: market instanceof Market ? fillEvent.feeCost : fillEvent.fee,
-      orderId: fillEvent.orderId,
+      exchangeOrderId: fillEvent.orderId,
       clientOrderId: fillEvent.clientOrderId,
       price: fillEvent.price,
       side: market instanceof Market ? fillEvent.side : fillEvent.takerSide,
