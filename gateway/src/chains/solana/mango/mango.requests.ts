@@ -54,7 +54,6 @@ interface FeeInfo {
 
 interface Market {
   name: string;
-  indexPrice: string; // oracle price of the underlying base asset (also used for liquidations)
   minimumOrderSize: string; // smallest allowed order size
   tickSize: string; // smallest possible price increment
 }
