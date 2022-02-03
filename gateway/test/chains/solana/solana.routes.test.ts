@@ -39,7 +39,7 @@ const patchGetKeypair = () => {
 
 describe('GET /solana', () => {
   it('should return 200', async () => {
-    request(gatewayApp)
+    await request(gatewayApp)
       .get(`/solana`)
       .expect('Content-Type', /json/)
       .expect(200)
