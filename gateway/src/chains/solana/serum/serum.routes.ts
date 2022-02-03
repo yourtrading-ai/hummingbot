@@ -21,12 +21,13 @@ import {
   SerumGetOrdersRequest,
   SerumGetOrdersResponse,
   SerumPostOrderRequest,
-  SerumPostOrderResponse,
+  SerumOrderResponse,
   SerumTickerResponse,
   SerumCancelOrderRequest,
-  SerumCancelOrdersResponse,
   SerumFillsRequest,
   SerumFillsResponse,
+  SerumCancelAllOrdersRequest,
+  SerumCancelAllOrdersResponse,
 } from './serum.requests';
 import { Serum } from './serum';
 
@@ -106,7 +107,7 @@ export namespace MangoRoutes {
     asyncHandler(
       async (
         req: Request<unknown, unknown, SerumPostOrderRequest>,
-        res: Response<SerumPostOrderResponse, any>
+        res: Response<SerumOrderResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await postOrder(req.body));
@@ -119,7 +120,20 @@ export namespace MangoRoutes {
     asyncHandler(
       async (
         req: Request<unknown, unknown, SerumCancelOrderRequest>,
-        res: Response<SerumCancelOrdersResponse, any>
+        res: Response<SerumOrderResponse, any>
+      ) => {
+        validatePublicKey(req.body);
+        res.status(200).json(await deleteOrders(req.body));
+      }
+    )
+  );
+
+  router.post(
+    '/cancelAll',
+    asyncHandler(
+      async (
+        req: Request<unknown, unknown, SerumCancelAllOrdersRequest>,
+        res: Response<SerumCancelAllOrdersResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await deleteOrders(req.body));

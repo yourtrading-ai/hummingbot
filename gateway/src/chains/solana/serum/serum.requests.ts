@@ -95,14 +95,14 @@ export interface SerumPostOrderRequest {
   clientOrderId?: string; // set a client's own orderId for tracking
 }
 
-export interface SerumPostOrderResponse {
+export interface SerumOrderResponse {
   status: 'OPEN' | 'FILLED' | 'CANCELED' | 'UNKNOWN' | 'FAILED' | 'DONE';
   exchangeOrderId?: string;
   clientOrderId?: string;
 }
 
 //
-// DELETE /orders
+// POST /cancel
 //
 export interface SerumCancelOrderRequest {
   mangoAccountAddress: string; // mango account, which orders belong to
@@ -110,8 +110,16 @@ export interface SerumCancelOrderRequest {
   clientOrderId?: string;
 }
 
-export interface SerumCancelOrdersResponse {
-  orders: SerumPostOrderResponse;
+//
+// POST /cancelAll
+//
+export interface SerumCancelAllOrdersRequest {
+  address: string; // solana account, for which to cancel
+  marketNames?: string[]; // on which markets to cancel
+}
+
+export interface SerumCancelAllOrdersResponse {
+  orders: SerumOrderResponse;
 }
 
 //
