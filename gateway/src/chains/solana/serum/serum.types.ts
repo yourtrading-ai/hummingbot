@@ -1,10 +1,25 @@
-import { Market } from '@project-serum/serum';
-import { Order as SpotOrder } from '@project-serum/serum/lib/market';
+export interface FeeInfo {
+  maker: string;
+  taker: string;
+}
 
-export type OrderInfo = {
-  market: Market;
-  order: SpotOrder;
-};
+export interface Market {
+  name: string;
+  minimumOrderSize: string; // smallest allowed order size
+  tickSize: string; // smallest possible price increment
+}
+
+export interface SpotMarket extends Market {
+  depositRate: string; //
+  borrowRate: string;
+}
+
+export interface PerpMarket extends Market {
+  //fundingRate: number; // hourly APR, positive if long pays short, negative if otherwise
+  baseLotSize: string; // smallest increment for the base (asset) amount
+  quoteLotSize: string; // smallest possible change in quote (USD) amount
+  openInterest: string; // the dollar volume of open positions
+}
 
 export type OrderBook = {
   market: Market;

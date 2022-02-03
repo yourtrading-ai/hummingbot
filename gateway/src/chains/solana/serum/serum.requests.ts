@@ -1,37 +1,18 @@
-//
-// GET /accounts
-//
+import {
+  FeeInfo,
+  FilledOrder,
+  OpenClientOrder,
+  PerpMarket,
+  SimpleOrder,
+  SpotMarket,
+} from './serum.types';
 
 //
 // GET /markets
 //
-import { FilledOrder, OpenClientOrder, SimpleOrder } from './serum.types';
 
 export interface SerumMarketsRequest {
   marketNames?: string[];
-}
-
-interface FeeInfo {
-  maker: string;
-  taker: string;
-}
-
-interface Market {
-  name: string;
-  minimumOrderSize: string; // smallest allowed order size
-  tickSize: string; // smallest possible price increment
-}
-
-interface SpotMarket extends Market {
-  depositRate: string; //
-  borrowRate: string;
-}
-
-interface PerpMarket extends Market {
-  //fundingRate: number; // hourly APR, positive if long pays short, negative if otherwise
-  baseLotSize: string; // smallest increment for the base (asset) amount
-  quoteLotSize: string; // smallest possible change in quote (USD) amount
-  openInterest: string; // the dollar volume of open positions
 }
 
 export interface SerumMarketsResponse {
@@ -67,25 +48,19 @@ export interface SerumOrderbookResponse {
 }
 
 //
-// GET /orders
+// GET /order
 //
-export interface SerumGetOrdersRequest {
-  address?: string; // filter by owner
-  marketName?: string; // filter by market (can speed up request dramatically)
-  exchangeOrderId?: string; // filter by exchangeOrderId
-  clientOrderId?: string; // filter by clientOrderId
-}
-
-export interface SerumGetOrdersResponse {
-  spot: OpenClientOrder[];
-  perp: OpenClientOrder[];
+export interface SerumGetOrderRequest {
+  marketName?: string;
+  clientOrderId?: string;
+  exchangeOrderId?: string;
 }
 
 //
-// POST /orders
+// POST /order
 //
 export interface SerumPostOrderRequest {
-  mangoAccountAddress: string;
+  address: string;
   marketName: string;
   side: 'BUY' | 'SELL';
   amount: string;
@@ -102,35 +77,50 @@ export interface SerumOrderResponse {
 }
 
 //
-// POST /cancel
+// Delete /order
 //
-export interface SerumCancelOrderRequest {
-  mangoAccountAddress: string; // mango account, which orders belong to
+export interface SerumDeleteOrderRequest {
+  address: string; // solana account, which orders belong to
   exchangeOrderId?: string; // is simply 'orderId' in mango.ts
   clientOrderId?: string;
 }
 
 //
-// POST /cancelAll
+// GET /openOrders
 //
-export interface SerumCancelAllOrdersRequest {
+export interface SerumGetOpenOrdersRequest {
+  address?: string; // filter by owner
+  marketName?: string; // filter by market (can speed up request dramatically)
+  exchangeOrderId?: string; // filter by exchangeOrderId
+  clientOrderId?: string; // filter by clientOrderId
+}
+
+export interface SerumGetOpenOrdersResponse {
+  spot: OpenClientOrder[];
+  perp: OpenClientOrder[];
+}
+
+//
+// DELETE /openOrders
+//
+export interface SerumDeleteOpenOrdersRequest {
   address: string; // solana account, for which to cancel
   marketNames?: string[]; // on which markets to cancel
 }
 
-export interface SerumCancelAllOrdersResponse {
+export interface SerumDeleteOpenOrdersResponse {
   orders: SerumOrderResponse;
 }
 
 //
 // GET /fills
 //
-export interface SerumFillsRequest {
+export interface SerumGetFillsRequest {
   marketNames?: string[];
   account?: string;
 }
 
-export interface SerumFillsResponse {
+export interface SerumGetFillsResponse {
   // sorted from newest to oldest
   spot: FilledOrder[];
   perp: FilledOrder[];

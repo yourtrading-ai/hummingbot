@@ -18,16 +18,17 @@ import {
   SerumMarketsResponse,
   SerumOrderbookRequest,
   SerumOrderbookResponse,
-  SerumGetOrdersRequest,
-  SerumGetOrdersResponse,
+  SerumGetOpenOrdersRequest,
+  SerumGetOpenOrdersResponse,
   SerumPostOrderRequest,
   SerumOrderResponse,
   SerumTickerResponse,
-  SerumCancelOrderRequest,
-  SerumFillsRequest,
-  SerumFillsResponse,
-  SerumCancelAllOrdersRequest,
-  SerumCancelAllOrdersResponse,
+  SerumDeleteOrderRequest,
+  SerumGetFillsRequest,
+  SerumGetFillsResponse,
+  SerumDeleteOpenOrdersRequest,
+  SerumDeleteOpenOrdersResponse,
+  SerumGetOrderRequest,
 } from './serum.requests';
 import { Serum } from './serum';
 
@@ -90,11 +91,11 @@ export namespace MangoRoutes {
   );
 
   router.get(
-    '/orders',
+    '/order',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, SerumGetOrdersRequest>,
-        res: Response<SerumGetOrdersResponse, any>
+        req: Request<unknown, unknown, SerumGetOrderRequest>,
+        res: Response<SerumOrderResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await getOrders(req.body));
@@ -103,7 +104,7 @@ export namespace MangoRoutes {
   );
 
   router.post(
-    '/create',
+    '/order',
     asyncHandler(
       async (
         req: Request<unknown, unknown, SerumPostOrderRequest>,
@@ -115,11 +116,11 @@ export namespace MangoRoutes {
     )
   );
 
-  router.post(
-    '/cancel',
+  router.delete(
+    '/order',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, SerumCancelOrderRequest>,
+        req: Request<unknown, unknown, SerumDeleteOrderRequest>,
         res: Response<SerumOrderResponse, any>
       ) => {
         validatePublicKey(req.body);
@@ -128,12 +129,25 @@ export namespace MangoRoutes {
     )
   );
 
-  router.post(
-    '/cancelAll',
+  router.get(
+    '/openOrders',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, SerumCancelAllOrdersRequest>,
-        res: Response<SerumCancelAllOrdersResponse, any>
+        req: Request<unknown, unknown, SerumGetOpenOrdersRequest>,
+        res: Response<SerumGetOpenOrdersResponse, any>
+      ) => {
+        validatePublicKey(req.body);
+        res.status(200).json(await getOrders(req.body));
+      }
+    )
+  );
+
+  router.delete(
+    '/openOrders',
+    asyncHandler(
+      async (
+        req: Request<unknown, unknown, SerumDeleteOpenOrdersRequest>,
+        res: Response<SerumDeleteOpenOrdersResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await deleteOrders(req.body));
@@ -145,8 +159,8 @@ export namespace MangoRoutes {
     '/fills',
     asyncHandler(
       async (
-        req: Request<unknown, unknown, SerumFillsRequest>,
-        res: Response<SerumFillsResponse, any>
+        req: Request<unknown, unknown, SerumGetFillsRequest>,
+        res: Response<SerumGetFillsResponse, any>
       ) => {
         validatePublicKey(req.body);
         res.status(200).json(await fills(req.body));
