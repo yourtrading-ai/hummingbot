@@ -39,6 +39,7 @@ export interface SerumTickerResponse {
 //
 export interface SerumOrderbookRequest {
   marketName: string;
+  depth?: number;
 }
 
 export interface SerumOrderbookResponse {
