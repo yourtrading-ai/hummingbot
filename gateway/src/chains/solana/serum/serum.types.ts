@@ -25,6 +25,7 @@ export type OrderBook = {
   market: Market;
   bids: SimpleOrder[];
   asks: SimpleOrder[];
+  timestamp: string;
 };
 
 /**

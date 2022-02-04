@@ -2,8 +2,8 @@ import {
   FeeInfo,
   FilledOrder,
   OpenClientOrder,
+  OrderBook,
   PerpMarket,
-  SimpleOrder,
   SpotMarket,
 } from './serum.types';
 
@@ -38,14 +38,12 @@ export interface SerumTickerResponse {
 // GET /orderbook
 //
 export interface SerumOrderbookRequest {
-  marketName: string;
+  marketNames: string[];
   depth?: number;
 }
 
 export interface SerumOrderbookResponse {
-  marketName: string;
-  bids: SimpleOrder[];
-  asks: SimpleOrder[];
+  orderBooks: OrderBook[];
 }
 
 //

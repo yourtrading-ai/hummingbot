@@ -78,7 +78,7 @@ export namespace MangoRoutes {
   );
 
   router.get(
-    '/orderbook',
+    '/orderbooks',
     asyncHandler(
       async (
         req: Request<unknown, unknown, SerumOrderbookRequest>,
