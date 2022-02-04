@@ -22,7 +22,7 @@ export interface PerpMarket extends Market {
 }
 
 export type OrderBook = {
-  market: Market;
+  marketName: string;
   bids: SimpleOrder[];
   asks: SimpleOrder[];
   timestamp: string;
