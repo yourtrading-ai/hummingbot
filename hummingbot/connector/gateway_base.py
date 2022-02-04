@@ -5,7 +5,7 @@ import logging
 import ssl
 import time
 from decimal import Decimal
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 import aiohttp
 from hummingbot.connector.connector_base import ConnectorBase, global_config_map
@@ -14,6 +14,7 @@ from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.network_iterator import NetworkStatus
 
 from hummingbot.client.settings import GATEAWAY_CA_CERT_PATH, GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH
+from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.logger import HummingbotLogger
 from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
@@ -24,10 +25,16 @@ s_decimal_NaN = Decimal("nan")
 logging.basicConfig(level=METRICS_LOG_LEVEL)
 
 
+GATEWAY_BASE_URL = f"https://{global_config_map['gateway_api_host'].value}:"\
+                   f"{global_config_map['gateway_api_port'].value}"
+
+
 class GatewayBase(ConnectorBase):
     """
     Defines basic functions common to connectors that interact with DEXes through Gateway.
     """
+
+    _gateway_connector: aiohttp.TCPConnector
 
     API_CALL_TIMEOUT = 10.0
     POLL_INTERVAL = 1.0
@@ -39,6 +46,43 @@ class GatewayBase(ConnectorBase):
         if s_logger is None:
             s_logger = logging.getLogger(cls.__name__)
         return s_logger
+
+    @classmethod
+    async def get_gateway_client(cls) -> aiohttp.ClientSession:
+        if cls._gateway_connector is None:
+            ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
+            ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
+            cls._gateway_connector = aiohttp.TCPConnector(ssl_context=ssl_ctx)
+        return aiohttp.ClientSession(connector=cls._gateway_connector)
+
+    @classmethod
+    def gateway_url(cls, path_url: str):
+        return f"{GATEWAY_BASE_URL}/{path_url}"
+
+    @classmethod
+    async def gateway_get_request(cls,
+                                  path_url: str,
+                                  params: Dict[str, Any] = None,
+                                  throttler: Optional[AsyncThrottler] = None) -> Dict[str, Any]:
+        url = cls.gateway_url(path_url)
+        async with cls.get_gateway_client() as client:
+            async with throttler.execute_task(limit_id=path_url):
+                response = await client.get(url, params=params)
+                return await cls.parse_gateway_response(response, url)
+
+    @classmethod
+    async def parse_gateway_response(cls, response: aiohttp.ClientResponse, url: str) -> Dict[str, Any]:
+        parsed_response = json.loads(await response.text())
+        if response.status != 200:
+            err_msg = ""
+            if "error" in parsed_response:
+                err_msg = f" Message: {parsed_response['error']}"
+            elif "message" in parsed_response:
+                err_msg = f" Message: {parsed_response['message']}"
+            raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.{err_msg}")
+        if "error" in parsed_response:
+            raise Exception(f"Error: {parsed_response['error']} {parsed_response['message']}")
+        return parsed_response
 
     def __init__(self,
                  trading_pairs: List[str],
