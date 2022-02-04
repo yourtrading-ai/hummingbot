@@ -3,25 +3,15 @@ export interface FeeInfo {
   taker: string;
 }
 
-export interface Market {
+export interface MarketInfo {
   name: string;
+  fees: FeeInfo;
   minimumOrderSize: string; // smallest allowed order size
   tickSize: string; // smallest possible price increment
+  deprecated: boolean;
 }
 
-export interface SpotMarket extends Market {
-  depositRate: string; //
-  borrowRate: string;
-}
-
-export interface PerpMarket extends Market {
-  //fundingRate: number; // hourly APR, positive if long pays short, negative if otherwise
-  baseLotSize: string; // smallest increment for the base (asset) amount
-  quoteLotSize: string; // smallest possible change in quote (USD) amount
-  openInterest: string; // the dollar volume of open positions
-}
-
-export type OrderBook = {
+export type SimpleOrderBook = {
   marketName: string;
   bids: SimpleOrder[];
   asks: SimpleOrder[];

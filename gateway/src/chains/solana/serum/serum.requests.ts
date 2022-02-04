@@ -1,10 +1,8 @@
 import {
-  FeeInfo,
   FilledOrder,
   OpenClientOrder,
-  OrderBook,
-  PerpMarket,
-  SpotMarket,
+  SimpleOrderBook,
+  MarketInfo,
 } from './serum.types';
 
 //
@@ -12,13 +10,11 @@ import {
 //
 
 export interface SerumMarketsRequest {
-  marketNames?: string[];
+  marketNames?: string[]; // returns all markets, if none
 }
 
 export interface SerumMarketsResponse {
-  fees: FeeInfo;
-  spot: SpotMarket[];
-  perp: PerpMarket[];
+  markets: MarketInfo[];
 }
 
 //
@@ -43,7 +39,7 @@ export interface SerumOrderbookRequest {
 }
 
 export interface SerumOrderbookResponse {
-  orderBooks: OrderBook[];
+  orderBooks: SimpleOrderBook[];
 }
 
 //
