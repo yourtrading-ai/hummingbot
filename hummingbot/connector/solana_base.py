@@ -81,11 +81,11 @@ class SolanaBase(GatewayBase):
 
     @property
     def name(self):
-        raise NotImplementedError
+        return "Solana"
 
     @property
     def base_path(self):
-        raise NotImplementedError
+        return None
 
     @staticmethod
     async def fetch_trading_pairs(self) -> List[str]:

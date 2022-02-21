@@ -1,5 +1,6 @@
 from solana.publickey import PublicKey
 
+from hummingbot.connector.solana_base import SolanaBase
 from hummingbot.core.utils.market_price import get_last_price
 from hummingbot.client.settings import AllConnectorSettings
 from hummingbot.client.config.security import Security
@@ -81,7 +82,8 @@ class UserBalances:
         # Update user balances, except connectors that use Ethereum wallet.
         if len(exchanges) == 0:
             exchanges = [cs.name for cs in AllConnectorSettings.get_connector_settings().values()]
-        exchanges = [cs.name for cs in AllConnectorSettings.get_connector_settings().values() if not cs.use_ethereum_wallet
+        exchanges = [cs.name for cs in AllConnectorSettings.get_connector_settings().values() if
+                     not cs.use_ethereum_wallet
                      and cs.name in exchanges and not cs.name.endswith("paper_trade")]
         if reconnect:
             self._markets.clear()
@@ -153,11 +155,22 @@ class UserBalances:
 
     @staticmethod
     def solana_balance() -> Decimal:
+        """Only retrieves SOL balance."""
         public_key = global_config_map.get("solana_wallet").value
         solana_rpc_url = global_config_map.get("solana_rpc_url").value
         solana_client = Client(solana_rpc_url)
         balance = solana_client.get_balance(PublicKey(public_key))["result"]["value"] * 1e-9
         return balance
+
+    @staticmethod
+    async def solana_spl_balances() -> Dict[str, Decimal]:
+        """Retrieves all SPL tokens' balances."""
+        sol_address = global_config_map["solana_wallet"].value
+        connector = SolanaBase(trading_pairs=["SOL/USDC"],
+                               solana_wallet_private_key=Security.private_keys()[sol_address],
+                               trading_required=False)
+        await connector._update_balances()
+        return connector.get_all_balances()
 
     @staticmethod
     def validate_solana_wallet() -> Optional[str]:

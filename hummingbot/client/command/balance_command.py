@@ -110,8 +110,9 @@ class BalanceCommand:
             else:
                 lines = ["    " + line for line in df.to_string(index=False).split("\n")]
                 self._notify("\n".join(lines))
-                self._notify(f"\n  Total: {RateOracle.global_token_symbol} {PerformanceMetrics.smart_round(df[total_col_name].sum())}    "
-                             f"Allocated: {allocated_total / df[total_col_name].sum():.2%}")
+                self._notify(
+                    f"\n  Total: {RateOracle.global_token_symbol} {PerformanceMetrics.smart_round(df[total_col_name].sum())}    "
+                    f"Allocated: {allocated_total / df[total_col_name].sum():.2%}")
                 exchanges_total += df[total_col_name].sum()
 
         self._notify(f"\n\nExchanges Total: {RateOracle.global_token_symbol} {exchanges_total:.0f}    ")
@@ -140,6 +141,15 @@ class BalanceCommand:
             lines = ["    " + line for line in xdai_df.to_string(index=False).split("\n")]
             self._notify("\nxdai:")
             self._notify("\n".join(lines))
+
+        sol_address = global_config_map["solana_wallet"].value
+        if sol_address is not None:
+            sol_df = await self.solana_balance_df()
+            lines = ["    " + line for line in sol_df.to_string(index=False).split("\n")]
+            self._notify("\nethereum:")
+            self._notify("\n".join(lines))
+        else:
+            self._notify("No Solana Wallet.")
 
     async def exchange_balances_extra_df(self,  # type: HummingbotApplication
                                          ex_balances: Dict[str, Decimal],
@@ -185,6 +195,16 @@ class BalanceCommand:
         else:
             eth_bal = UserBalances.ethereum_balance()
             rows.append({"Asset": "ETH", "Amount": round(eth_bal, 4)})
+        df = pd.DataFrame(data=rows, columns=["Asset", "Amount"])
+        df.sort_values(by=["Asset"], inplace=True)
+        return df
+
+    async def solana_balance_df(self,  # type: HummingbotApplication
+                                ):
+        rows = []
+        bals = await UserBalances.solana_spl_balances()
+        for token, bal in bals.items():
+            rows.append({"Asset": token, "Amount": round(bal, 4)})
         df = pd.DataFrame(data=rows, columns=["Asset", "Amount"])
         df.sort_values(by=["Asset"], inplace=True)
         return df
