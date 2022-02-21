@@ -22,7 +22,7 @@ from hummingbot.core.event.events import (
     TradeFee
 )
 from hummingbot.connector.gateway_base import GatewayBase
-from hummingbot.connector.gateway_in_flight_order import GatewayInFlightOrder
+from hummingbot.connector.ethereum_in_flight_order import EthereumInFlightOrder
 from hummingbot.core.utils.ethereum import check_transaction_exceptions, fetch_trading_pairs
 
 s_logger = None
@@ -103,7 +103,7 @@ class EthereumBase(GatewayBase):
         }
 
     @property
-    def approval_orders(self) -> List[GatewayInFlightOrder]:
+    def approval_orders(self) -> List[EthereumInFlightOrder]:
         return [
             approval_order
             for approval_order in self._in_flight_orders.values() if approval_order.client_order_id.split("_")[0] == "approve"
@@ -332,7 +332,7 @@ class EthereumBase(GatewayBase):
             self.trigger_event(MarketEvent.OrderFailure,
                                MarketOrderFailureEvent(self.current_timestamp, order_id, OrderType.LIMIT))
 
-    async def _update_approval_order_status(self, tracked_orders: GatewayInFlightOrder):
+    async def _update_approval_order_status(self, tracked_orders: List[EthereumInFlightOrder]):
         """
         Calls REST API to get status update for each in-flight order.
         This function can also be used to update status of simple swap orders.
@@ -404,7 +404,7 @@ class EthereumBase(GatewayBase):
                                            ))
                         self.stop_tracking_order(tracked_order.client_order_id)
 
-    async def _update_order_status(self, tracked_orders: GatewayInFlightOrder):
+    async def _update_order_status(self, tracked_orders: List[EthereumInFlightOrder]):
         """
         Calls REST API to get status update for each in-flight amm orders.
         """
