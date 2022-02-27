@@ -54,6 +54,13 @@ class SolanaBase(GatewayBase):
     def private_key(self):
         return self._solana_wallet_private_key
 
+    @property
+    def public_key(self):
+        return self._solana_wallet_address
+
+    def start_tracking_order(self, *args, **kwargs):
+        return NotImplementedError
+
     async def init(self):
         if self._trading_required is True:
             await self.auto_create_token_accounts()

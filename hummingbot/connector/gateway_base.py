@@ -128,6 +128,10 @@ class GatewayBase(ConnectorBase):
     def private_key(self):
         raise NotImplementedError
 
+    @property
+    def public_key(self):
+        raise NotImplementedError
+
     async def init(self):
         """
         Function to prepare the wallet, which was connected. For Ethereum this might include approving allowances,
@@ -266,7 +270,9 @@ class GatewayBase(ConnectorBase):
             local_asset_names = set(self._account_balances.keys())
             remote_asset_names = set()
             resp_json = await self._api_request("post", f"{self.network_base_path}/balances",
-                                                {"tokenSymbols": list(self._tokens)})
+                                                {
+                                                    "tokenSymbols": list(self._tokens)
+                                                })
             for token, bal in resp_json["balances"].items():
                 self._account_available_balances[token] = Decimal(str(bal))
                 self._account_balances[token] = Decimal(str(bal))
@@ -309,10 +315,11 @@ class GatewayBase(ConnectorBase):
         if method == "get":
             if len(params) > 0:
                 response = await client.get(url, params=params)
+
             else:
                 response = await client.get(url)
         elif method == "post":
-            params["privateKey"] = self.private_key
+            params["address"] = self.public_key
             response = await client.post(url, json=params)
         parsed_response = json.loads(await response.text())
         if response.status != 200:

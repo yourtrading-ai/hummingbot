@@ -84,6 +84,13 @@ class EthereumBase(GatewayBase):
             self._wallet_private_key = "0x" + self._wallet_private_key
         return self._wallet_private_key
 
+    @property
+    def public_key(self):
+        raise NotImplementedError
+
+    def start_tracking_order(self, *args, **kwargs):
+        raise NotImplementedError
+
     @staticmethod
     async def fetch_trading_pairs() -> List[str]:
         return await fetch_trading_pairs()

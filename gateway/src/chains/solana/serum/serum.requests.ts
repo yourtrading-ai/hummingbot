@@ -10,6 +10,7 @@ import {
 //
 
 export interface SerumMarketsRequest {
+  // TODO: It could be that address is needed for fee rebates
   marketNames?: string[]; // returns all markets, if none
 }
 

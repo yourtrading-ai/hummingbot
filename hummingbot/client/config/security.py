@@ -1,3 +1,5 @@
+import base58
+
 from hummingbot.client.config.config_crypt import (
     list_encrypted_file_paths,
     decrypt_file,
@@ -63,9 +65,11 @@ class Security:
                     return False
                 raise err
         elif wallets:
+            # TODO: Do not decrypt, ask gateway if private keys exist
             try:
                 decrypt_wallet(wallets[0], password)
             except ValueError as err:
+                # TODO: If Gateway doesn't have private key, delete the public key or ask user to reenter
                 if str(err) == "MAC mismatch":
                     return False
                 raise err
@@ -109,14 +113,14 @@ class Security:
 
     @classmethod
     def add_private_key(cls, private_key, wallet_type: WalletType = WalletType.ETHEREUM) -> str:
-        # Add private key and return public key
+        # TODO: Call Gateway to store private key
         if wallet_type == WalletType.ETHEREUM:
             account = import_and_save_eth_wallet(cls.password, private_key)
             cls._private_keys[account.address] = account.privateKey
             return account.address
         elif wallet_type == WalletType.SOLANA:
             keypair = import_and_save_sol_wallet(cls.password, private_key)
-            cls._private_keys[keypair.public_key.to_base58().decode('ascii')] = keypair.secret_key
+            cls._private_keys[keypair.public_key.to_base58().decode('ascii')] = base58.b58encode(keypair.secret_key).decode('ascii')
             return keypair.public_key.to_base58().decode('ascii')
         else:
             raise Exception("Invalid WalletType, choose ETHEREUM or SOLANA.")
