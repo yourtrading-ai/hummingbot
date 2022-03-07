@@ -5,7 +5,7 @@ import logging
 import ssl
 import time
 from decimal import Decimal
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 
 import aiohttp
 from hummingbot.connector.connector_base import ConnectorBase, global_config_map
@@ -48,7 +48,7 @@ class GatewayBase(ConnectorBase):
         return s_logger
 
     @classmethod
-    async def get_gateway_client(cls) -> aiohttp.ClientSession:
+    def get_client(cls) -> aiohttp.ClientSession:
         if cls._gateway_connector is None:
             ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
             ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
@@ -60,18 +60,39 @@ class GatewayBase(ConnectorBase):
         return f"{GATEWAY_BASE_URL}/{path_url}"
 
     @classmethod
-    async def gateway_get_request(cls,
-                                  path_url: str,
-                                  params: Dict[str, Any] = None,
-                                  throttler: Optional[AsyncThrottler] = None) -> Dict[str, Any]:
+    async def api_request(cls,
+                          method: str,
+                          path_url: str,
+                          params: Dict[str, Any] = None,
+                          throttler: Optional[AsyncThrottler] = None) -> Union[List, Dict[str, Any]]:
         url = cls.gateway_url(path_url)
-        async with cls.get_gateway_client() as client:
+        method = method.upper()
+        async with cls.get_client() as client:
             async with throttler.execute_task(limit_id=path_url):
-                response = await client.get(url, params=params)
-                return await cls.parse_gateway_response(response, url)
+                if method == "GET":
+                    response = await client.get(url, params=params)
+                elif method == "POST":
+                    response = await client.post(url, params=params)
+                elif method == "PUT":
+                    response = await client.put(url, params=params)
+                elif method == "DELETE":
+                    response = await client.delete(url, params=params)
+                return await cls._parse_response(response, url)
 
     @classmethod
-    async def parse_gateway_response(cls, response: aiohttp.ClientResponse, url: str) -> Dict[str, Any]:
+    async def add_wallet(cls, chain: str, network: str, private_key: str):
+        await cls.api_request("POST", "wallet/add", {
+            'chain': chain,  # self.name,
+            'network': network,  # global_config_map[f'{self.name}_chain_name'],
+            'privateKey': private_key,  # self.private_key
+        })
+
+    @classmethod
+    async def get_wallets(cls) -> List[Dict[str, str]]:
+        return await cls.api_request("GET", "wallet/")
+
+    @classmethod
+    async def _parse_response(cls, response: aiohttp.ClientResponse, url: str) -> Union[List, Dict[str, Any]]:
         parsed_response = json.loads(await response.text())
         if response.status != 200:
             err_msg = ""
@@ -300,7 +321,8 @@ class GatewayBase(ConnectorBase):
     async def _api_request(self,
                            method: str,
                            path_url: str,
-                           params: Dict[str, Any] = {}) -> Dict[str, Any]:
+                           params: Dict[str, Any] = {},
+                           throttler: Optional[AsyncThrottler] = None) -> Dict[str, Any]:
         """
         Sends an aiohttp request and waits for a response.
         :param method: The HTTP method, e.g. get or post
@@ -308,31 +330,9 @@ class GatewayBase(ConnectorBase):
         :param params: A dictionary of required params for the end point
         :returns A response in json format.
         """
-        base_url = f"https://{global_config_map['gateway_api_host'].value}:" \
-                   f"{global_config_map['gateway_api_port'].value}"
-        url = f"{base_url}/{path_url}"
-        client = await self._http_client()
-        if method == "get":
-            if len(params) > 0:
-                response = await client.get(url, params=params)
-
-            else:
-                response = await client.get(url)
-        elif method == "post":
-            params["address"] = self.public_key
-            response = await client.post(url, json=params)
-        parsed_response = json.loads(await response.text())
-        if response.status != 200:
-            err_msg = ""
-            if "error" in parsed_response:
-                err_msg = f" Message: {parsed_response['error']}"
-            elif "message" in parsed_response:
-                err_msg = f" Message: {parsed_response['message']}"
-            raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.{err_msg}")
-        if "error" in parsed_response:
-            raise Exception(f"Error: {parsed_response['error']} {parsed_response['message']}")
-
-        return parsed_response
+        if method.upper() == 'POST':
+            params['address'] = self.public_key
+        return await self.api_request(method, path_url, params, throttler)
 
     @property
     def in_flight_orders(self) -> Dict[str, InFlightOrderBase]:
