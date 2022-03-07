@@ -50,9 +50,9 @@ class SerumAPIOrderBookDataSource(OrderBookTrackerDataSource):
                                      trading_pairs: List[str],
                                      throttler: Optional[AsyncThrottler] = None) -> Dict[str, float]:
         throttler = throttler or cls._get_throttler_instance()
-        response = await GatewayBase.gateway_get_request(CONSTANTS.TICKER_URL,
-                                                         {'marketNames': trading_pairs},
-                                                         throttler)
+        response = await GatewayBase.get_request(CONSTANTS.TICKER_URL,
+                                                 {'marketNames': trading_pairs},
+                                                 throttler)
         return {ticker['marketName']: float(ticker['price']) for ticker in response['lastTradedPrices']}
 
     @classmethod
@@ -64,12 +64,12 @@ class SerumAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def get_all_mid_prices() -> Dict[str, Decimal]:
         throttler = SerumAPIOrderBookDataSource._get_throttler_instance()
         trading_pairs = await SerumAPIOrderBookDataSource.fetch_trading_pairs()
-        response = await GatewayBase.gateway_get_request(CONSTANTS.ORDERBOOKS_URL,
-                                                         {
+        response = await GatewayBase.get_request(CONSTANTS.ORDERBOOKS_URL,
+                                                 {
                                                              'marketNames': trading_pairs,
                                                              'depth': 1
                                                          },
-                                                         throttler)
+                                                 throttler)
         return {ob['marketName']: (Decimal(ob['bids'][0] if len(ob) > 0 else "0") +
                                    Decimal(ob['asks'][0] if len(ob) > 0 else "0")) / Decimal("2")
                 for ob in response['orderBooks']}
@@ -79,7 +79,7 @@ class SerumAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def fetch_trading_pairs() -> List[str]:
         try:
             throttler = SerumAPIOrderBookDataSource._get_throttler_instance()
-            response = await GatewayBase.gateway_get_request(CONSTANTS.MARKETS_URL, {}, throttler)
+            response = await GatewayBase.get_request(CONSTANTS.MARKETS_URL, {}, throttler)
             return [market['name'] for market in response['markets']]
 
         except Exception:
@@ -98,12 +98,12 @@ class SerumAPIOrderBookDataSource(OrderBookTrackerDataSource):
                             limit: int = 1000,
                             throttler: Optional[AsyncThrottler] = None) -> Dict[str, Any]:
         throttler = throttler or SerumAPIOrderBookDataSource._get_throttler_instance()
-        response = await GatewayBase.gateway_get_request(CONSTANTS.ORDERBOOKS_URL,
-                                                         {
+        response = await GatewayBase.get_request(CONSTANTS.ORDERBOOKS_URL,
+                                                 {
                                                              'marketNames': trading_pairs,
                                                              'depth': limit
                                                          },
-                                                         throttler)
+                                                 throttler)
         return response
 
     @staticmethod
