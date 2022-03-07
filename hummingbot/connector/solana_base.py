@@ -30,12 +30,12 @@ class SolanaBase(GatewayBase):
 
     def __init__(self,
                  trading_pairs: List[str],
-                 solana_wallet_private_key: str,
+                 private_key: str,
                  trading_required: bool = True
                  ):
         """
         :param trading_pairs: a list of trading pairs
-        :param solana_wallet_private_key: a solana wallet keypair, encoded in base58, 64 bytes long,
+        :param private_key: a solana wallet keypair, encoded in base58, 64 bytes long,
         (first 32 bytes are the secret, last 32 bytes the public key)
         :param trading_required: Whether actual trading is needed. Useful for some functionalities or commands like the balance command
         """
@@ -43,8 +43,8 @@ class SolanaBase(GatewayBase):
         self._tokens = set()
         for trading_pair in trading_pairs:
             self._tokens.update(set(trading_pair.split("-")))
-        self._solana_wallet_address = base58.b58encode(base58.b58decode(solana_wallet_private_key)[32:]).decode('ascii')
-        self._solana_wallet_private_key = solana_wallet_private_key
+        self._address = base58.b58encode(base58.b58decode(private_key)[32:]).decode('ascii')
+        self._private_key = private_key
 
     @property
     def network_base_path(self):
@@ -52,14 +52,11 @@ class SolanaBase(GatewayBase):
 
     @property
     def private_key(self):
-        return self._solana_wallet_private_key
+        return self._private_key
 
     @property
     def public_key(self):
-        return self._solana_wallet_address
-
-    def start_tracking_order(self, *args, **kwargs):
-        return NotImplementedError
+        return self._address
 
     async def init(self):
         if self._trading_required is True:
@@ -71,15 +68,15 @@ class SolanaBase(GatewayBase):
             await self.get_or_create_token_account(token)
 
     async def get_or_create_token_account(self, token_symbol: str) -> Union[Dict[str, Any], None]:
-        resp = await self._api_request("post",
-                                       "solana/token",
-                                       {"token": token_symbol,
-                                        "privateKey": self._solana_wallet_private_key})
+        resp = await self._api_request("POST", "solana/token",
+                                       {
+                                           "token": token_symbol
+                                       })
         if resp.get("accountAddress", None) is None:
             self.logger().info(f"Token account initialization for {token_symbol} on {self.name} failed.")
             return None
         else:
-            self.logger().info(f"{token_symbol} account on wallet {self._solana_wallet_address} initialized"
+            self.logger().info(f"{token_symbol} account on wallet {self._address} initialized"
                                f" with mint address {resp['mintAddress']}.")
             return resp
 
@@ -98,14 +95,6 @@ class SolanaBase(GatewayBase):
     async def fetch_trading_pairs(self) -> List[str]:
         # TODO: Get Solana trading pairs
         raise NotImplementedError
-
-    def get_order_price_quantum(self, trading_pair: str, price: Decimal) -> Decimal:
-        # TODO: Find out smallest price increments
-        return super().get_order_price_quantum()
-
-    def get_order_size_quantum(self, trading_pair: str, order_size: Decimal) -> Decimal:
-        # TODO: Find out smallest size increments
-        return super().get_order_size_quantum()
 
     @property
     def ready(self):

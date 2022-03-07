@@ -80,7 +80,9 @@ class GatewayBase(ConnectorBase):
                 return await cls._parse_response(response, url)
 
     @classmethod
-    async def add_wallet(cls, chain: str, network: str, private_key: str):
+    async def add_wallet(cls, private_key: str = None, chain: str = None, network: str = None):
+        if chain is None or network is None or private_key is None:
+            raise ValueError(f"Missing parameters: private_key = {private_key}, chain = {chain}, network = {network}")
         await cls.api_request("POST", "wallet/add", {
             'chain': chain,  # self.name,
             'network': network,  # global_config_map[f'{self.name}_chain_name'],
@@ -89,6 +91,13 @@ class GatewayBase(ConnectorBase):
 
     @classmethod
     async def get_wallets(cls) -> List[Dict[str, str]]:
+        """
+        Returns a list of objects containing:
+        {
+            chain: str  // name of the chain the wallets belong to
+            walletAddresses: List[str]  // all stored wallets' public keys
+        }
+        """
         return await cls.api_request("GET", "wallet/")
 
     @classmethod
@@ -307,17 +316,6 @@ class GatewayBase(ConnectorBase):
             self._in_flight_orders_snapshot = {k: copy.copy(v) for k, v in self._in_flight_orders.items()}
             self._in_flight_orders_snapshot_timestamp = self.current_timestamp
 
-    async def _http_client(self) -> aiohttp.ClientSession:
-        """
-        :returns Shared client session instance
-        """
-        if self._shared_client is None:
-            ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
-            ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
-            conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
-            self._shared_client = aiohttp.ClientSession(connector=conn)
-        return self._shared_client
-
     async def _api_request(self,
                            method: str,
                            path_url: str,
@@ -330,8 +328,7 @@ class GatewayBase(ConnectorBase):
         :param params: A dictionary of required params for the end point
         :returns A response in json format.
         """
-        if method.upper() == 'POST':
-            params['address'] = self.public_key
+        params['address'] = self.public_key
         return await self.api_request(method, path_url, params, throttler)
 
     @property
