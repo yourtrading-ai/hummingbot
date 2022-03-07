@@ -13,3 +13,5 @@ cdef class InFlightOrderBase:
         public object fee_paid
         public str last_state
         public object exchange_order_id_update_event
+        public object completely_filled_event
+        public double _creation_timestamp

@@ -33,15 +33,15 @@ def get_key_file_path() -> str:
     return path if path is not None else DEFAULT_KEY_FILE_PATH
 
 
-def import_and_save_eth_wallet(password: str, private_key: str) -> Account:
+def import_and_save_wallet(password: str, private_key: str) -> Account:
     """
-    Create an account from a private key, then encrypt the private key and store it in the path from get_key_file_path()
+    Create an account for a private key, then encryt the private key and store it in the path from get_key_file_path()
     """
-    acct: Account = Account.from_key(private_key)
-    return save_eth_wallet(acct, password)
+    acct: Account = Account.privateKeyToAccount(private_key)
+    return save_wallet(acct, password)
 
 
-def save_eth_wallet(acct: Account, password: str) -> Account:
+def save_wallet(acct: Account, password: str) -> Account:
     """
     For a given account and password, encrypt the account address and store it in the path from get_key_file_path()
     """
@@ -71,12 +71,12 @@ def save_sol_wallet(acct: Keypair, password: str) -> Keypair:
     return acct
 
 
-def decrypt_wallet(public_key: str, password: str) -> str:
+def unlock_wallet(wallet_address: str, password: str) -> str:
     """
     Search get_key_file_path() by a public key for an account file, then decrypt the private key from the file with the
     provided password
     """
-    file_path: str = "%s%s%s%s" % (get_key_file_path(), KEYFILE_PREFIX, public_key, KEYFILE_POSTFIX)
+    file_path: str = "%s%s%s%s" % (get_key_file_path(), KEYFILE_PREFIX, wallet_address, KEYFILE_POSTFIX)
     with open(file_path, 'r') as f:
         encrypted = f.read()
     private_key: str = Account.decrypt(encrypted, password)

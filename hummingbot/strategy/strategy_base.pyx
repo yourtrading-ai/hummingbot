@@ -12,13 +12,9 @@ from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from hummingbot.core.time_iterator cimport TimeIterator
 from hummingbot.connector.connector_base cimport ConnectorBase
 from hummingbot.core.data_type.trade import Trade
-from hummingbot.core.event.events import (
-    OrderFilledEvent,
-    OrderType,
-    PositionAction
-)
-
-from .order_tracker import OrderTracker
+from hummingbot.core.event.events import OrderFilledEvent
+from hummingbot.core.data_type.common import OrderType, PositionAction
+from hummingbot.strategy.order_tracker import OrderTracker
 from hummingbot.connector.derivative_base import DerivativeBase
 
 NaN = float("nan")
@@ -591,7 +587,7 @@ cdef class StrategyBase(TimeIterator):
         :param msg: The message to be notified
         """
         from hummingbot.client.hummingbot_application import HummingbotApplication
-        HummingbotApplication.main_application()._notify(msg)
+        HummingbotApplication.main_application().notify(msg)
 
     def notify_hb_app_with_timestamp(self, msg: str):
         """

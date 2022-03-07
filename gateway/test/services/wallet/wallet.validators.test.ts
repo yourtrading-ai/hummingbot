@@ -18,7 +18,7 @@ describe('isEthPrivateKey', () => {
   it('pass against a well formed private key', () => {
     expect(
       isEthPrivateKey(
-        'da857cbda0ba96757fed842617a40693d06d00001e55aa972955039ae747bac4'
+        'da857cbda0ba96757fed842617a40693d06d00001e55aa972955039ae747bac4' // noqa: mock
       )
     ).toEqual(true);
   });
@@ -68,7 +68,7 @@ describe('validatePrivateKey', () => {
       validatePrivateKey({
         chain: 'ethereum',
         privateKey:
-          'da857cbda0ba96757fed842617a40693d06d00001e55aa972955039ae747bac4',
+          'da857cbda0ba96757fed842617a40693d06d00001e55aa972955039ae747bac4', // noqa: mock
       })
     ).toEqual([]);
   });
@@ -141,6 +141,14 @@ describe('validateChain', () => {
     expect(
       validateChain({
         chain: 'solana',
+      })
+    ).toEqual([]);
+  });
+
+  it('valid when chain is harmony', () => {
+    expect(
+      validateChain({
+        chain: 'harmony',
       })
     ).toEqual([]);
   });

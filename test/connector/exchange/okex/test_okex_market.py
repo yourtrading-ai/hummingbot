@@ -1,57 +1,20 @@
-#!/usr/bin/env python
-import logging
-from os.path import join, realpath
-import sys; sys.path.insert(0, realpath(join(__file__, "../../../../../")))
-
-from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
-
 import asyncio
 import contextlib
-from decimal import Decimal
+import logging
+import math
 import os
 import time
+import unittest
+from decimal import Decimal
+from os.path import join, realpath
 from typing import (
     List,
-    Optional
+    Optional,
 )
-import unittest
-import math
-import conf
-from hummingbot.core.clock import (
-    Clock,
-    ClockMode
-)
-from hummingbot.core.event.event_logger import EventLogger
-from hummingbot.core.event.events import (
-    MarketEvent,
-    MarketOrderFailureEvent,
-    BuyOrderCompletedEvent,
-    SellOrderCompletedEvent,
-    OrderFilledEvent,
-    OrderCancelledEvent,
-    BuyOrderCreatedEvent,
-    SellOrderCreatedEvent,
-    TradeFee,
-    TradeType,
-)
-from hummingbot.core.utils.async_utils import (
-    safe_ensure_future,
-    safe_gather,
-)
-from hummingbot.connector.exchange.okex.okex_exchange import OkexExchange
-from hummingbot.connector.exchange_base import OrderType
-from hummingbot.connector.markets_recorder import MarketsRecorder
-from hummingbot.model.market_state import MarketState
-from hummingbot.model.order import Order
-from hummingbot.model.sql_connection_manager import (
-    SQLConnectionManager,
-    SQLConnectionType
-)
-from hummingbot.model.trade_fill import TradeFill
-from hummingbot.client.config.fee_overrides_config_map import fee_overrides_config_map
-from hummingbot.core.mock_api.mock_web_server import MockWebServer
-from test.connector.exchange.okex.fixture_okex import FixtureOKEx
 from unittest import mock
+
+import conf
+from hummingbot.client.config.fee_overrides_config_map import fee_overrides_config_map
 from hummingbot.connector.exchange.okex.constants import (
     OKEX_BASE_URL,
     OKEX_SERVER_TIME,
@@ -65,6 +28,39 @@ from hummingbot.connector.exchange.okex.constants import (
     OKEX_DEPTH_URL,
     OKEX_TICKERS_URL,
 )
+from hummingbot.connector.exchange.okex.okex_exchange import OkexExchange
+from hummingbot.connector.markets_recorder import MarketsRecorder
+from hummingbot.core.clock import (
+    Clock,
+    ClockMode,
+)
+from hummingbot.core.data_type.common import OrderType, TradeType
+from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee
+from hummingbot.core.event.event_logger import EventLogger
+from hummingbot.core.event.events import (
+    BuyOrderCompletedEvent,
+    BuyOrderCreatedEvent,
+    MarketEvent,
+    MarketOrderFailureEvent,
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    SellOrderCompletedEvent,
+    SellOrderCreatedEvent,
+)
+from hummingbot.core.mock_api.mock_web_server import MockWebServer
+from hummingbot.core.utils.async_utils import (
+    safe_ensure_future,
+    safe_gather,
+)
+from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
+from hummingbot.model.market_state import MarketState
+from hummingbot.model.order import Order
+from hummingbot.model.sql_connection_manager import (
+    SQLConnectionManager,
+    SQLConnectionType
+)
+from hummingbot.model.trade_fill import TradeFill
+from test.connector.exchange.okex.fixture_okex import FixtureOKEx
 
 MOCK_API_ENABLED = conf.mock_api_enabled is not None and conf.mock_api_enabled.lower() in ['true', 'yes', '1']
 # MOCK_API_ENABLED = True
@@ -204,28 +200,38 @@ class OkexExchangeUnitTest(unittest.TestCase):
         return self.ev_loop.run_until_complete(self.run_parallel_async(*tasks))
 
     def test_get_fee(self):
-        limit_fee: TradeFee = self.market.get_fee("ETH", "USDT", OrderType.LIMIT_MAKER, TradeType.BUY, 1, 10)
+        limit_fee: AddedToCostTradeFee = self.market.get_fee("ETH", "USDT", OrderType.LIMIT_MAKER, TradeType.BUY, 1, 10)
         self.assertGreater(limit_fee.percent, 0)
         self.assertEqual(len(limit_fee.flat_fees), 0)
-        market_fee: TradeFee = self.market.get_fee("ETH", "USDT", OrderType.LIMIT, TradeType.BUY, 1)
+        market_fee: AddedToCostTradeFee = self.market.get_fee("ETH", "USDT", OrderType.LIMIT, TradeType.BUY, 1)
         self.assertGreater(market_fee.percent, 0)
         self.assertEqual(len(market_fee.flat_fees), 0)
-        sell_trade_fee: TradeFee = self.market.get_fee("ETH", "USDT", OrderType.LIMIT_MAKER, TradeType.SELL, 1, 10)
+        sell_trade_fee: AddedToCostTradeFee = self.market.get_fee(
+            "ETH", "USDT", OrderType.LIMIT_MAKER, TradeType.SELL, 1, 10
+        )
         self.assertGreater(sell_trade_fee.percent, 0)
         self.assertEqual(len(sell_trade_fee.flat_fees), 0)
 
     def test_fee_overrides_config(self):
         fee_overrides_config_map["okex_taker_fee"].value = None
-        taker_fee: TradeFee = self.market.get_fee("LINK", "ETH", OrderType.LIMIT, TradeType.BUY, Decimal(1), Decimal('0.1'))
+        taker_fee: AddedToCostTradeFee = self.market.get_fee(
+            "LINK", "ETH", OrderType.LIMIT, TradeType.BUY, Decimal(1), Decimal('0.1')
+        )
         self.assertAlmostEqual(Decimal("0.0015"), taker_fee.percent)
         fee_overrides_config_map["okex_taker_fee"].value = Decimal('0.1')
-        taker_fee: TradeFee = self.market.get_fee("LINK", "ETH", OrderType.LIMIT, TradeType.BUY, Decimal(1), Decimal('0.1'))
+        taker_fee: AddedToCostTradeFee = self.market.get_fee(
+            "LINK", "ETH", OrderType.LIMIT, TradeType.BUY, Decimal(1), Decimal('0.1')
+        )
         self.assertAlmostEqual(Decimal("0.001"), taker_fee.percent)
         fee_overrides_config_map["okex_maker_fee"].value = None
-        maker_fee: TradeFee = self.market.get_fee("LINK", "ETH", OrderType.LIMIT_MAKER, TradeType.BUY, Decimal(1), Decimal('0.1'))
+        maker_fee: AddedToCostTradeFee = self.market.get_fee(
+            "LINK", "ETH", OrderType.LIMIT_MAKER, TradeType.BUY, Decimal(1), Decimal('0.1')
+        )
         self.assertAlmostEqual(Decimal("0.001"), maker_fee.percent)
         fee_overrides_config_map["okex_maker_fee"].value = Decimal('0.5')
-        maker_fee: TradeFee = self.market.get_fee("LINK", "ETH", OrderType.LIMIT_MAKER, TradeType.BUY, Decimal(1), Decimal('0.1'))
+        maker_fee: AddedToCostTradeFee = self.market.get_fee(
+            "LINK", "ETH", OrderType.LIMIT_MAKER, TradeType.BUY, Decimal(1), Decimal('0.1')
+        )
         self.assertAlmostEqual(Decimal("0.005"), maker_fee.percent)
 
     def place_order(self, is_buy, trading_pair, amount, order_type, price, nonce, get_resp, market_connector=None):

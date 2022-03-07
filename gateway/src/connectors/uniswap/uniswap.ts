@@ -16,9 +16,9 @@ import {
 } from '@uniswap/sdk';
 import { BigNumber, Transaction, Wallet } from 'ethers';
 import { logger } from '../../services/logger';
-import { ExpectedTrade, Uniswapish } from '../../services/uniswapish.interface';
 import { percentRegexp } from '../../services/config-manager-v2';
 import { Ethereum } from '../../chains/ethereum/ethereum';
+import { ExpectedTrade, Uniswapish } from '../../services/common-interfaces';
 export class Uniswap implements Uniswapish {
   private static _instances: { [name: string]: Uniswap };
   private ethereum: Ethereum;
@@ -36,10 +36,10 @@ export class Uniswap implements Uniswapish {
     const config = UniswapConfig.config;
     this.ethereum = Ethereum.getInstance(network);
     this.chainId = this.ethereum.chainId;
-    this._ttl = UniswapConfig.config.ttl;
+    this._ttl = UniswapConfig.config.ttl(2);
     this._routerAbi = routerAbi.abi;
-    this._gasLimit = UniswapConfig.config.gasLimit;
-    this._router = config.uniswapV2RouterAddress;
+    this._gasLimit = UniswapConfig.config.gasLimit(2);
+    this._router = config.uniswapV2RouterAddress(network);
   }
 
   public static getInstance(chain: string, network: string): Uniswap {
@@ -96,7 +96,7 @@ export class Uniswap implements Uniswapish {
   }
 
   getSlippagePercentage(): Percent {
-    const allowedSlippage = UniswapConfig.config.allowedSlippage;
+    const allowedSlippage = UniswapConfig.config.allowedSlippage(2);
     const nd = allowedSlippage.match(percentRegexp);
     if (nd) return new Percent(nd[1], nd[2]);
     throw new Error(

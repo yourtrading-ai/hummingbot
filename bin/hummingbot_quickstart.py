@@ -4,35 +4,37 @@ import path_util        # noqa: F401
 import argparse
 import asyncio
 import logging
+import os
+from pathlib import Path
+import pwd
 from typing import (
     Coroutine,
     List,
 )
-import os
 import subprocess
 
-from hummingbot import (
-    check_dev_mode,
-    init_logging,
+from bin.hummingbot import (
+    detect_available_port,
+    UIStartListener,
 )
+from hummingbot import init_logging
 from hummingbot.client.hummingbot_application import HummingbotApplication
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.config.config_helpers import (
     create_yml_files,
-    write_config_to_yml,
     read_system_configs_from_yml,
     update_strategy_config_map_from_file,
     all_configs_complete,
 )
 from hummingbot.client.ui import login_prompt
-from hummingbot.client.ui.stdout_redirection import patch_stdout
-from hummingbot.core.utils.async_utils import safe_gather
+from hummingbot.core.event.events import HummingbotUIEvent
+from hummingbot.core.gateway import start_existing_gateway_container
 from hummingbot.core.management.console import start_management_console
-from bin.hummingbot import (
-    detect_available_port,
-)
+from hummingbot.core.utils.async_utils import safe_gather
 from hummingbot.client.settings import CONF_FILE_PATH, AllConnectorSettings
 from hummingbot.client.config.security import Security
+
+from bin.docker_connection import fork_and_start
 
 
 class CmdlineParser(argparse.ArgumentParser):
@@ -45,7 +47,7 @@ class CmdlineParser(argparse.ArgumentParser):
         self.add_argument("--wallet", "-w",
                           type=str,
                           required=False,
-                          help="Specify the wallet public key you would like to use.")
+                          help="Specify the wallet address you would like to use.")
         self.add_argument("--config-password", "--wallet-password", "-p",
                           type=str,
                           required=False,
@@ -58,12 +60,22 @@ class CmdlineParser(argparse.ArgumentParser):
 
 
 def autofix_permissions(user_group_spec: str):
+    uid, gid = [int(i) for i in user_group_spec.split(':')]
+    os.environ["HOME"] = pwd.getpwuid(uid).pw_dir
     project_home: str = os.path.realpath(os.path.join(__file__, "../../"))
-    subprocess.run(f"cd '{project_home}' && "
-                   f"sudo chown -R {user_group_spec} conf/ data/ logs/", capture_output=True, shell=True)
+
+    gateway_path: str = Path.home().joinpath(".hummingbot-gateway").as_posix()
+    subprocess.run(
+        f"cd '{project_home}' && "
+        f"sudo chown -R {user_group_spec} conf/ data/ logs/ scripts/ {gateway_path}",
+        capture_output=True,
+        shell=True
+    )
+    os.setgid(gid)
+    os.setuid(uid)
 
 
-async def quick_start(args):
+async def quick_start(args: argparse.Namespace):
     config_file_name = args.config_file_name
     wallet = args.wallet
     password = args.config_password
@@ -100,25 +112,17 @@ async def quick_start(args):
         if not all_configs_complete(hb.strategy_name):
             hb.status()
 
-    with patch_stdout(log_field=hb.app.log_field):
-        dev_mode = check_dev_mode()
-        if dev_mode:
-            hb.app.log("Running from dev branches. Full remote logging will be enabled.")
+    # The listener needs to have a named variable for keeping reference, since the event listener system
+    # uses weak references to remove unneeded listeners.
+    start_listener: UIStartListener = UIStartListener(hb)
+    hb.app.add_listener(HummingbotUIEvent.Start, start_listener)
 
-        log_level = global_config_map.get("log_level").value
-        init_logging("hummingbot_logs.yml",
-                     override_log_level=log_level,
-                     dev_mode=dev_mode)
+    tasks: List[Coroutine] = [hb.run(), start_existing_gateway_container()]
+    if global_config_map.get("debug_console").value:
+        management_port: int = detect_available_port(8211)
+        tasks.append(start_management_console(locals(), host="localhost", port=management_port))
 
-        if hb.strategy_file_name is not None and hb.strategy_name is not None:
-            await write_config_to_yml(hb.strategy_name, hb.strategy_file_name)
-            hb.start(log_level)
-
-        tasks: List[Coroutine] = [hb.run()]
-        if global_config_map.get("debug_console").value:
-            management_port: int = detect_available_port(8211)
-            tasks.append(start_management_console(locals(), host="localhost", port=management_port))
-        await safe_gather(*tasks)
+    await safe_gather(*tasks)
 
 
 def main():
@@ -143,4 +147,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    fork_and_start(main)

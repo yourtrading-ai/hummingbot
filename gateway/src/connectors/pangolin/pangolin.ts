@@ -17,8 +17,8 @@ import {
   Trade,
 } from '@pangolindex/sdk';
 import { logger } from '../../services/logger';
-import { ExpectedTrade, Uniswapish } from '../../services/uniswapish.interface';
 import { Avalanche } from '../../chains/avalanche/avalanche';
+import { ExpectedTrade, Uniswapish } from '../../services/common-interfaces';
 
 export class Pangolin implements Uniswapish {
   private static _instances: { [name: string]: Pangolin };
@@ -37,7 +37,7 @@ export class Pangolin implements Uniswapish {
     const config = PangolinConfig.config;
     this.avalanche = Avalanche.getInstance(network);
     this.chainId = this.avalanche.chainId;
-    this._router = config.routerAddress;
+    this._router = config.routerAddress(network);
     this._ttl = config.ttl;
     this._routerAbi = routerAbi.abi;
     this._gasLimit = config.gasLimit;

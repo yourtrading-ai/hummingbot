@@ -4,6 +4,7 @@ export interface NetworkConfig {
   slug: string;
   rpcUrl: string;
 }
+
 export interface Config {
   network: NetworkConfig;
   nativeCurrencySymbol: string;
@@ -14,6 +15,7 @@ export interface Config {
   customRpcUrl: string | undefined;
   rpcAPIKey: string | undefined;
 }
+
 export namespace SolanaConfig {
   export const config: Config = getSolanaConfig('solana');
 }
@@ -27,7 +29,7 @@ export function getSolanaConfig(chainName: string): Config {
       rpcUrl: configManager.get(chainName + '.networks.' + network + '.rpcURL'),
     },
     nativeCurrencySymbol: configManager.get(
-      chainName + '.nativeCurrencySymbol'
+      chainName + '.networks.' + network + '.nativeCurrencySymbol'
     ),
     tokenProgram: configManager.get(chainName + '.tokenProgram'),
     transactionLamports: configManager.get(chainName + '.transactionLamports'),

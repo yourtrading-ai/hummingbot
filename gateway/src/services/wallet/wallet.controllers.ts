@@ -2,9 +2,11 @@ import fse from 'fs-extra';
 import { Avalanche } from '../../chains/avalanche/avalanche';
 import { Ethereum } from '../../chains/ethereum/ethereum';
 import { Solana } from '../../chains/solana/solana';
+import { Harmony } from '../../chains/harmony/harmony';
 
 import {
   AddWalletRequest,
+  AddWalletResponse,
   RemoveWalletRequest,
   GetWalletResponse,
 } from './wallet.requests';
@@ -28,7 +30,9 @@ export async function mkdirIfDoesNotExist(path: string): Promise<void> {
   }
 }
 
-export async function addWallet(req: AddWalletRequest): Promise<void> {
+export async function addWallet(
+  req: AddWalletRequest
+): Promise<AddWalletResponse> {
   const passphrase = ConfigManagerCertPassphrase.readPassphrase();
   if (!passphrase) {
     throw new Error('There is no passphrase');
@@ -48,6 +52,10 @@ export async function addWallet(req: AddWalletRequest): Promise<void> {
       .getKeypairFromPrivateKey(req.privateKey)
       .publicKey.toBase58();
     encryptedPrivateKey = await solana.encrypt(req.privateKey, passphrase);
+  } else if (req.chain === 'harmony') {
+    const harmony = Harmony.getInstance(req.network);
+    address = harmony.getWalletFromPrivateKey(req.privateKey).address;
+    encryptedPrivateKey = await harmony.encrypt(req.privateKey, passphrase);
   } else {
     throw new HttpException(
       500,
@@ -59,6 +67,7 @@ export async function addWallet(req: AddWalletRequest): Promise<void> {
   const path = `${walletPath}/${req.chain}`;
   await mkdirIfDoesNotExist(path);
   await fse.writeFile(`${path}/${address}.json`, encryptedPrivateKey);
+  return { address };
 }
 
 // if the file does not exist, this should not fail
@@ -69,6 +78,7 @@ export async function removeWallet(req: RemoveWalletRequest): Promise<void> {
 }
 
 export async function getDirectories(source: string): Promise<string[]> {
+  await mkdirIfDoesNotExist(walletPath);
   const files = await fse.readdir(source, { withFileTypes: true });
   return files
     .filter((dirent) => dirent.isDirectory())

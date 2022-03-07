@@ -4,13 +4,13 @@ import json
 import logging
 import ssl
 import time
+import warnings
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 
 from hummingbot.client.config.global_config_map import global_config_map
-from hummingbot.client.settings import GATEAWAY_CA_CERT_PATH, GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH
 from hummingbot.connector.derivative.perpetual_budget_checker import PerpetualBudgetChecker
 from hummingbot.connector.derivative.perpetual_finance.perpetual_finance_in_flight_order import (
     PerpetualFinanceInFlightOrder
@@ -20,7 +20,9 @@ from hummingbot.connector.derivative.position import Position
 from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.perpetual_trading import PerpetualTrading
 from hummingbot.core.data_type.cancellation_result import CancellationResult
+from hummingbot.core.data_type.common import OrderType, PositionAction, PositionSide, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
+from hummingbot.core.data_type.trade_fee import TokenAmount
 from hummingbot.core.event.events import (
     BuyOrderCompletedEvent,
     BuyOrderCreatedEvent,
@@ -29,18 +31,14 @@ from hummingbot.core.event.events import (
     MarketEvent,
     MarketOrderFailureEvent,
     OrderFilledEvent,
-    OrderType,
-    PositionAction,
-    PositionSide,
     SellOrderCompletedEvent,
     SellOrderCreatedEvent,
-    TradeFee,
-    TradeType
 )
+from hummingbot.core.gateway import GatewayPaths, get_gateway_paths
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.core.utils import async_ttl_cache
 from hummingbot.core.utils.async_utils import safe_ensure_future, safe_gather
-from hummingbot.core.utils.estimate_fee import estimate_fee
+from hummingbot.core.utils.estimate_fee import build_perpetual_trade_fee
 from hummingbot.core.utils.tracking_nonce import get_tracking_nonce
 from hummingbot.logger import HummingbotLogger
 from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
@@ -276,9 +274,18 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
                 tracked_order.executed_amount_quote = amount * price
                 event_tag = MarketEvent.BuyOrderCreated if trade_type is TradeType.BUY else MarketEvent.SellOrderCreated
                 event_class = BuyOrderCreatedEvent if trade_type is TradeType.BUY else SellOrderCreatedEvent
-                self.trigger_event(event_tag, event_class(self.current_timestamp, OrderType.LIMIT, trading_pair, amount,
-                                                          price, order_id, hash, leverage=self._leverage[trading_pair],
-                                                          position=position_action.name))
+                self.trigger_event(event_tag,
+                                   event_class(
+                                       self.current_timestamp,
+                                       OrderType.LIMIT,
+                                       trading_pair,
+                                       amount,
+                                       price,
+                                       order_id,
+                                       tracked_order.creation_timestamp,
+                                       hash,
+                                       leverage=self._leverage[trading_pair],
+                                       position=position_action.name))
             else:
                 self.trigger_event(MarketEvent.OrderFailure,
                                    MarketOrderFailureEvent(self.current_timestamp, order_id, OrderType.LIMIT))
@@ -316,6 +323,7 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
             trade_type=trade_type,
             price=price,
             amount=amount,
+            creation_timestamp=self.current_timestamp,
             leverage=leverage,
             position=position
         )
@@ -341,7 +349,7 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
                                                "perpfi/receipt",
                                                {"txHash": order_id}))
             update_results = await safe_gather(*tasks, return_exceptions=True)
-            for update_result in update_results:
+            for update_result, tracked_order in zip(update_results, tracked_orders):
                 self.logger().info(f"Polling for order status updates of {len(tasks)} orders.")
                 if isinstance(update_result, Exception):
                     raise update_result
@@ -350,8 +358,18 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
                     continue
                 if update_result["confirmed"] is True:
                     if update_result["receipt"]["status"] == 1:
-                        fee = estimate_fee("perpetual_finance", False)
-                        fee = TradeFee(fee.percent, [("XDAI", Decimal(str(update_result["receipt"]["gasUsed"])))])
+                        fee = build_perpetual_trade_fee(
+                            exchange=self.name,
+                            is_maker=True,
+                            position_action=PositionAction[tracked_order.position],
+                            base_currency=tracked_order.base_asset,
+                            quote_currency=tracked_order.quote_asset,
+                            order_type=tracked_order.order_type,
+                            order_side=tracked_order.trade_type,
+                            amount=tracked_order.amount,
+                            price=tracked_order.price,
+                        )
+                        fee.flat_fees.append(TokenAmount("XDAI", Decimal(str(update_result["receipt"]["gasUsed"]))))
                         self.trigger_event(
                             MarketEvent.OrderFilled,
                             OrderFilledEvent(
@@ -384,9 +402,11 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
                                                        tracked_order.fee_asset,
                                                        tracked_order.executed_amount_base,
                                                        tracked_order.executed_amount_quote,
-                                                       float(fee.fee_amount_in_quote(tracked_order.trading_pair,
+                                                       float(fee.fee_amount_in_token(tracked_order.trading_pair,
                                                                                      Decimal(str(tracked_order.price)),
-                                                                                     Decimal(str(tracked_order.amount)))),  # this ignores the gas fee, which is fine for now
+                                                                                     Decimal(str(tracked_order.amount)),
+                                                                                     tracked_order.quote_asset,
+                                                                                     self)),  # this ignores the gas fee, which is fine for now
                                                        tracked_order.order_type))
                         self.stop_tracking_order(tracked_order.client_order_id)
                     else:
@@ -586,9 +606,14 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
         """
         :returns Shared client session instance
         """
+        gateway_paths: GatewayPaths = get_gateway_paths()
+        gateway_ca_cert_path = f"{gateway_paths.local_certs_path.as_posix()}/ca_cert.pem"
+        gateway_client_cert_path = f"{gateway_paths.local_certs_path.as_posix()}/client_cert.pem"
+        gateway_client_key_path = f"{gateway_paths.local_certs_path.as_posix()}/client_key.pem"
+
         if self._shared_client is None:
-            ssl_ctx = ssl.create_default_context(cafile=GATEAWAY_CA_CERT_PATH)
-            ssl_ctx.load_cert_chain(GATEAWAY_CLIENT_CERT_PATH, GATEAWAY_CLIENT_KEY_PATH)
+            ssl_ctx = ssl.create_default_context(cafile=gateway_ca_cert_path)
+            ssl_ctx.load_cert_chain(gateway_client_cert_path, gateway_client_key_path)
             conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
             self._shared_client = aiohttp.ClientSession(connector=conn)
         return self._shared_client
@@ -638,14 +663,21 @@ class PerpetualFinanceDerivative(ExchangeBase, PerpetualTrading):
         return self._in_flight_orders
 
     def get_fee(self,
-                base_currency: str,
-                quote_currency: str,
-                order_type: OrderType,
-                order_side: TradeType,
-                amount: Decimal,
-                price: Decimal = s_decimal_0) -> TradeFee:
-        fee = estimate_fee("perpetual_finance", False)
-        return fee
+                base_currency: Optional[str] = None,
+                quote_currency: Optional[str] = None,
+                order_type: Optional[OrderType] = None,
+                order_side: Optional[TradeType] = None,
+                amount: Optional[Decimal] = None,
+                price: Decimal = s_decimal_0,
+                is_maker: Optional[bool] = None):
+        warnings.warn(
+            "The 'estimate_fee' method is deprecated, use 'build_trade_fee' and 'build_perpetual_trade_fee' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise DeprecationWarning(
+            "The 'estimate_fee' method is deprecated, use 'build_trade_fee' and 'build_perpetual_trade_fee' instead."
+        )
 
     def get_buy_collateral_token(self, trading_pair: str) -> str:
         _, quote = self.split_trading_pair(trading_pair)

@@ -1,27 +1,25 @@
 import unittest
-import pandas as pd
-
 from decimal import Decimal
 from typing import List
+
+import pandas as pd
+
 from hummingbot.connector.exchange.paper_trade.paper_trade_exchange import QuantizationParams
-from hummingbot.connector.exchange.paper_trade.market_config import MarketConfig, AssetType
 from hummingbot.core.clock import (
     Clock,
     ClockMode
 )
+from hummingbot.core.data_type.common import OrderType, PriceType, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
-from hummingbot.core.event.events import (
-    MarketEvent,
-    TradeType,
-    OrderType,
-    OrderFilledEvent,
-    OrderBookTradeEvent,
-    BuyOrderCompletedEvent,
-    SellOrderCompletedEvent,
-    TradeFee,
-    PriceType,
-)
+from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee
 from hummingbot.core.event.event_logger import EventLogger
+from hummingbot.core.event.events import (
+    BuyOrderCompletedEvent,
+    MarketEvent,
+    OrderBookTradeEvent,
+    OrderFilledEvent,
+    SellOrderCompletedEvent,
+)
 from hummingbot.strategy.dev_2_perform_trade import PerformTradeStrategy
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from test.mock.mock_paper_exchange import MockPaperExchange
@@ -133,7 +131,6 @@ class Dev2PerformTradeUnitTest(unittest.TestCase):
         base_currency_traded: Decimal = limit_order.quantity
         quote_currency: str = limit_order.quote_currency
         base_currency: str = limit_order.base_currency
-        config: MarketConfig = market.config
 
         trade_event = OrderBookTradeEvent(
             trading_pair=limit_order.trading_pair,
@@ -154,14 +151,14 @@ class Dev2PerformTradeUnitTest(unittest.TestCase):
                 OrderType.LIMIT,
                 limit_order.price,
                 limit_order.quantity,
-                TradeFee(Decimal(0.0))
+                AddedToCostTradeFee(Decimal(0.0))
             ))
             market.trigger_event(MarketEvent.BuyOrderCompleted, BuyOrderCompletedEvent(
                 market.current_timestamp,
                 limit_order.client_order_id,
                 base_currency,
                 quote_currency,
-                base_currency if config.buy_fees_asset is AssetType.BASE_CURRENCY else quote_currency,
+                base_currency,
                 base_currency_traded,
                 quote_currency_traded,
                 Decimal(0.0),
@@ -179,14 +176,14 @@ class Dev2PerformTradeUnitTest(unittest.TestCase):
                 OrderType.LIMIT,
                 limit_order.price,
                 limit_order.quantity,
-                TradeFee(Decimal(0.0))
+                AddedToCostTradeFee(Decimal(0.0))
             ))
             market.trigger_event(MarketEvent.SellOrderCompleted, SellOrderCompletedEvent(
                 market.current_timestamp,
                 limit_order.client_order_id,
                 base_currency,
                 quote_currency,
-                base_currency if config.sell_fees_asset is AssetType.BASE_CURRENCY else quote_currency,
+                base_currency,
                 base_currency_traded,
                 quote_currency_traded,
                 Decimal(0.0),

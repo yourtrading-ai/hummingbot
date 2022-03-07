@@ -1,20 +1,9 @@
 jest.useFakeTimers();
-import { gatewayApp } from '../src/app';
-import { SwaggerManager } from '../src/services/swagger-manager';
+import { gatewayApp, swaggerDocument } from '../src/app';
 import { difference } from 'lodash';
 
 describe('verify swagger docs', () => {
   it('All routes should have swagger documentation', () => {
-    const swaggerDocument = SwaggerManager.generateSwaggerJson(
-      './docs/swagger/swagger.yml',
-      './docs/swagger/definitions.yml',
-      [
-        './docs/swagger/main-routes.yml',
-        './docs/swagger/trading-routes.yml',
-        './docs/swagger/wallet-routes.yml',
-        './docs/swagger/solana-routes.yml',
-      ]
-    );
     const documentedRoutes = Object.keys(swaggerDocument.paths).sort();
 
     const allRoutes: any[] = [];

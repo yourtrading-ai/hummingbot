@@ -1,5 +1,3 @@
-import base58
-
 from hummingbot.client.config.config_crypt import (
     list_encrypted_file_paths,
     decrypt_file,
@@ -10,8 +8,9 @@ from hummingbot.client.config.config_crypt import (
 )
 from hummingbot.core.utils.wallet_setup import (
     list_wallets,
-    decrypt_wallet,
-    import_and_save_eth_wallet, import_and_save_sol_wallet
+    unlock_wallet,
+    import_and_save_wallet,
+    import_and_save_sol_wallet
 )
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.settings import AllConnectorSettings
@@ -67,7 +66,7 @@ class Security:
         elif wallets:
             # TODO: Do not decrypt, ask gateway if private keys exist
             try:
-                decrypt_wallet(wallets[0], password)
+                unlock_wallet(wallets[0], password)
             except ValueError as err:
                 # TODO: If Gateway doesn't have private key, delete the public key or ask user to reenter
                 if str(err) == "MAC mismatch":
@@ -86,7 +85,7 @@ class Security:
     @classmethod
     def unlock_wallet(cls, public_key):
         if public_key not in cls._private_keys:
-            cls._private_keys[public_key] = decrypt_wallet(public_key=public_key, password=Security.password)
+            cls._private_keys[public_key] = unlock_wallet(public_key=public_key, password=Security.password)
         return cls._private_keys[public_key]
 
     @classmethod
@@ -115,7 +114,7 @@ class Security:
     def add_private_key(cls, private_key, wallet_type: WalletType = WalletType.ETHEREUM) -> str:
         # TODO: Call Gateway to store private key
         if wallet_type == WalletType.ETHEREUM:
-            account = import_and_save_eth_wallet(cls.password, private_key)
+            account = import_and_save_wallet(cls.password, private_key)
             cls._private_keys[account.address] = account.privateKey
             return account.address
         elif wallet_type == WalletType.SOLANA:

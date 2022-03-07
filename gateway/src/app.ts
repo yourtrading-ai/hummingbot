@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-types */
 import express from 'express';
 import { Server } from 'http';
 import { Request, Response, NextFunction } from 'express';
@@ -13,9 +14,13 @@ import {
 } from './services/error-handler';
 import { ConfigManagerV2 } from './services/config-manager-v2';
 import { SwaggerManager } from './services/swagger-manager';
-import { StatusRequest, StatusResponse } from './chains/chain.requests';
-import { getStatus } from './chains/chain.controllers';
-import { TradingRoutes } from './trading/trading.routes';
+import { NetworkRoutes } from './network/network.routes';
+import { ConnectorsRoutes } from './connectors/connectors.routes';
+import { EVMRoutes } from './evm/evm.routes';
+import { AmmRoutes } from './amm/amm.routes';
+import { PangolinConfig } from './connectors/pangolin/pangolin.config';
+import { UniswapConfig } from './connectors/uniswap/uniswap.config';
+import { AvailableNetworks } from './services/config-manager-types';
 
 const swaggerUi = require('swagger-ui-express');
 
@@ -30,10 +35,12 @@ gatewayApp.use(express.json());
 gatewayApp.use(express.urlencoded({ extended: true }));
 
 // mount sub routers
-gatewayApp.use('/trading', TradingRoutes.router);
-gatewayApp.use('/wallet', WalletRoutes.router);
+gatewayApp.use('/network', NetworkRoutes.router);
+gatewayApp.use('/evm', EVMRoutes.router);
+gatewayApp.use('/connectors', ConnectorsRoutes.router);
 
-// mount sub routers
+gatewayApp.use('/amm', AmmRoutes.router);
+gatewayApp.use('/wallet', WalletRoutes.router);
 gatewayApp.use('/solana', SolanaRoutes.router);
 
 // a simple route to test that the server is running
@@ -41,19 +48,20 @@ gatewayApp.get('/', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok' });
 });
 
-gatewayApp.get(
-  '/status',
-  async (
-    req: Request<{}, {}, StatusRequest>,
-    res: Response<StatusResponse, {}>
-  ) => {
-    res.status(200).json(await getStatus(req.body));
-  }
-);
+interface ConnectorsResponse {
+  uniswap: Array<AvailableNetworks>;
+  pangolin: Array<AvailableNetworks>;
+}
 
-gatewayApp.get('/config', (_req: Request, res: Response<any, any>) => {
-  res.status(200).json(ConfigManagerV2.getInstance().allConfigurations);
-});
+gatewayApp.get(
+  '/connectors',
+  asyncHandler(async (_req, res: Response<ConnectorsResponse, {}>) => {
+    res.status(200).json({
+      uniswap: UniswapConfig.config.availableNetworks,
+      pangolin: PangolinConfig.config.availableNetworks,
+    });
+  })
+);
 
 interface ConfigUpdateRequest {
   configPath: string;
@@ -67,8 +75,6 @@ gatewayApp.post(
       req: Request<unknown, unknown, ConfigUpdateRequest>,
       res: Response
     ) => {
-      console.log('req.body.configPath ' + req.body.configPath);
-      console.log('req.body.configValue ' + req.body.configValue);
       const config = ConfigManagerV2.getInstance().get(req.body.configPath);
       if (typeof req.body.configValue == 'string')
         switch (typeof config) {
@@ -117,20 +123,23 @@ gatewayApp.use(
   }
 );
 
+export const swaggerDocument = SwaggerManager.generateSwaggerJson(
+  './docs/swagger/swagger.yml',
+  './docs/swagger/definitions.yml',
+  [
+    './docs/swagger/main-routes.yml',
+    './docs/swagger/connectors-routes.yml',
+    './docs/swagger/wallet-routes.yml',
+    './docs/swagger/amm-routes.yml',
+    './docs/swagger/evm-routes.yml',
+    './docs/swagger/network-routes.yml',
+    './docs/swagger/solana-routes.yml',
+  ]
+);
+
 export const startSwagger = async () => {
   const swaggerApp = express();
   const swaggerPort = 8080;
-
-  const swaggerDocument = SwaggerManager.generateSwaggerJson(
-    './docs/swagger/swagger.yml',
-    './docs/swagger/definitions.yml',
-    [
-      './docs/swagger/main-routes.yml',
-      './docs/swagger/trading-routes.yml',
-      './docs/swagger/wallet-routes.yml',
-      './docs/swagger/solana-routes.yml',
-    ]
-  );
 
   logger.info(
     `⚡️ Swagger listening on port ${swaggerPort}. Read the Gateway API documentation at 127.0.0.1:${swaggerPort}`

@@ -5,7 +5,7 @@ import { EthereumBase } from '../../services/ethereum-base';
 import { getEthereumConfig as getAvalancheConfig } from '../ethereum/ethereum.config';
 import { Provider } from '@ethersproject/abstract-provider';
 import { PangolinConfig } from '../../connectors/pangolin/pangolin.config';
-import { Ethereumish } from '../../services/ethereumish.interface';
+import { Ethereumish } from '../../services/common-interfaces';
 
 export class Avalanche extends EthereumBase implements Ethereumish {
   private static _instances: { [name: string]: Avalanche };
@@ -39,6 +39,10 @@ export class Avalanche extends EthereumBase implements Ethereumish {
     return Avalanche._instances[network];
   }
 
+  public static getConnectedInstances(): { [name: string]: Avalanche } {
+    return Avalanche._instances;
+  }
+
   // getters
 
   public get gasPrice(): number {
@@ -60,7 +64,7 @@ export class Avalanche extends EthereumBase implements Ethereumish {
   getSpender(reqSpender: string): string {
     let spender: string;
     if (reqSpender === 'pangolin') {
-      spender = PangolinConfig.config.routerAddress;
+      spender = PangolinConfig.config.routerAddress(this._chain);
     } else {
       spender = reqSpender;
     }

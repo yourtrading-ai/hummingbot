@@ -1,29 +1,31 @@
-#!/usr/bin/env python
-from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
-from decimal import Decimal
+import logging
 import math
-import logging; logging.basicConfig(level=logging.ERROR)
-import pandas as pd
-from typing import List
 import unittest
+from decimal import Decimal
+from typing import List
+
+import pandas as pd
+
+from hummingbot.connector.exchange.paper_trade.paper_trade_exchange import QuantizationParams
 from hummingbot.core.clock import (
     Clock,
     ClockMode
 )
+from hummingbot.core.data_type.common import OrderType, TradeType
+from hummingbot.core.data_type.limit_order import LimitOrder
+from hummingbot.core.data_type.trade_fee import AddedToCostTradeFee
 from hummingbot.core.event.event_logger import EventLogger
 from hummingbot.core.event.events import (
-    MarketEvent,
-    TradeType,
-    OrderType,
-    OrderFilledEvent,
     BuyOrderCompletedEvent,
-    SellOrderCompletedEvent,
-    TradeFee
+    MarketEvent,
+    OrderFilledEvent,
+    SellOrderCompletedEvent
 )
-from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.strategy.dev_5_vwap import Dev5TwapTradeStrategy
-from hummingbot.connector.exchange.paper_trade.paper_trade_exchange import QuantizationParams
+from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from test.mock.mock_paper_exchange import MockPaperExchange
+
+logging.basicConfig(level=logging.ERROR)
 
 
 class TWAPUnitTest(unittest.TestCase):
@@ -137,7 +139,7 @@ class TWAPUnitTest(unittest.TestCase):
                 OrderType.LIMIT,
                 limit_order.price,
                 limit_order.quantity,
-                TradeFee(Decimal("0"))
+                AddedToCostTradeFee(Decimal("0"))
             ))
             market.trigger_event(MarketEvent.BuyOrderCompleted, BuyOrderCompletedEvent(
                 market.current_timestamp,
@@ -161,7 +163,7 @@ class TWAPUnitTest(unittest.TestCase):
                 OrderType.LIMIT,
                 limit_order.price,
                 limit_order.quantity,
-                TradeFee(Decimal("0"))
+                AddedToCostTradeFee(Decimal("0"))
             ))
             market.trigger_event(MarketEvent.SellOrderCompleted, SellOrderCompletedEvent(
                 market.current_timestamp,
