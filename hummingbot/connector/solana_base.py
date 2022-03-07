@@ -1,7 +1,6 @@
 import logging
 from decimal import Decimal
 from typing import Dict, List, Any, Union
-import base58
 
 from hummingbot.logger.struct_logger import METRICS_LOG_LEVEL
 from hummingbot.logger import HummingbotLogger
@@ -29,8 +28,10 @@ class SolanaBase(GatewayBase):
         return s_logger
 
     def __init__(self,
+                 connector_name: str,
+                 network: str,
+                 wallet_address: str,
                  trading_pairs: List[str],
-                 private_key: str,
                  trading_required: bool = True
                  ):
         """
@@ -39,26 +40,9 @@ class SolanaBase(GatewayBase):
         (first 32 bytes are the secret, last 32 bytes the public key)
         :param trading_required: Whether actual trading is needed. Useful for some functionalities or commands like the balance command
         """
-        super().__init__(trading_pairs, trading_required)
-        self._tokens = set()
-        for trading_pair in trading_pairs:
-            self._tokens.update(set(trading_pair.split("-")))
-        self._address = base58.b58encode(base58.b58decode(private_key)[32:]).decode('ascii')
-        self._private_key = private_key
+        super().__init__(connector_name, "solana", network, wallet_address, trading_pairs, trading_required)
 
-    @property
-    def network_base_path(self):
-        return "solana"
-
-    @property
-    def private_key(self):
-        return self._private_key
-
-    @property
-    def public_key(self):
-        return self._address
-
-    async def init(self):
+    async def init_connector(self):
         if self._trading_required is True:
             await self.auto_create_token_accounts()
 
@@ -84,24 +68,8 @@ class SolanaBase(GatewayBase):
         await self._update_balances()
 
     @property
-    def name(self):
-        return "Solana"
-
-    @property
-    def base_path(self):
-        return None
-
-    @staticmethod
-    async def fetch_trading_pairs(self) -> List[str]:
-        # TODO: Get Solana trading pairs
-        raise NotImplementedError
-
-    @property
-    def ready(self):
-        return all(self.status_dict.values())
-
-    @property
     def status_dict(self) -> Dict[str, bool]:
         return {
-            "account_balance": len(self._account_balances) > 0 if self._trading_required else True
+            "account_balance": len(self._account_balances) > 0 if self._trading_required else True,
+            "token_accounts": len(self._account_balances) > 0 if self._trading_required else True
         }

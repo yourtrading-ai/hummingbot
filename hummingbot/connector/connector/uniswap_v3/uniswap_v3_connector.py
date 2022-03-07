@@ -3,7 +3,7 @@ import json
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from hummingbot.connector.ethereum_base import EthereumBase
+from hummingbot.connector.evm_base import EVMBase
 from hummingbot.connector.ethereum_in_flight_order import EthereumInFlightOrder
 from hummingbot.client.config.fee_overrides_config_map import fee_overrides_config_map
 from hummingbot.connector.connector.uniswap_v3.uniswap_v3_in_flight_position import (
@@ -36,9 +36,9 @@ s_decimal_0 = Decimal("0")
 s_decimal_NaN = Decimal("nan")
 
 
-class UniswapV3Connector(EthereumBase):
+class UniswapV3Connector(EVMBase):
     """
-    UniswapV3Connector extends EthereumBase to provide v3 specific functionality, e.g. ranged positions
+    UniswapV3Connector extends EVMBase to provide v3 specific functionality, e.g. ranged positions
     """
 
     def __init__(self,

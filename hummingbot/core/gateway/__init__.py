@@ -257,15 +257,16 @@ class GatewayHttpClient:
                    f"{global_config_map['gateway_api_port'].value}"
         url = f"{base_url}/{path_url}"
         client = self._http_client()
+        method = method.upper()
 
         parsed_response = {}
         try:
-            if method == "get":
+            if method == "GET":
                 if len(params) > 0:
                     response = await client.get(url, params=params)
                 else:
                     response = await client.get(url)
-            elif method == "post":
+            elif method == "POST":
                 response = await client.post(url, json=params)
             else:
                 raise ValueError(f"Unsupported request method {method}")
@@ -284,7 +285,7 @@ class GatewayHttpClient:
 
     async def ping_gateway(self) -> bool:
         try:
-            response: Dict[str, Any] = await self.api_request("get", "", fail_silently=True)
+            response: Dict[str, Any] = await self.api_request("GET", "", fail_silently=True)
             return response["status"] == "ok"
         except Exception:
             return False
