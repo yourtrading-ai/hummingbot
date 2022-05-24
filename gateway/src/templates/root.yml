@@ -12,6 +12,10 @@ configurations:
     configurationPath: avalanche.yml
     schemaPath: ethereum-schema.json
 
+  $namespace database:
+    configurationPath: database.yml
+    schemaPath: database-schema.json
+    
   $namespace ethereum:
     configurationPath: ethereum.yml
     schemaPath: ethereum-schema.json
@@ -43,3 +47,7 @@ configurations:
   $namespace uniswap:
     configurationPath: uniswap.yml
     schemaPath: uniswap-schema.json
+
+  $namespace serum:
+    configurationPath: serum.yml
+    schemaPath: serum-schema.json

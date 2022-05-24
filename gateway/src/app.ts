@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import express from 'express';
-import { Server } from 'http';
 import { Request, Response, NextFunction } from 'express';
+import { ConfigRoutes } from './services/config/config.routes';
 import { SolanaRoutes } from './chains/solana/solana.routes';
 import { WalletRoutes } from './services/wallet/wallet.routes';
-import { logger, updateLoggerToStdout } from './services/logger';
+import { logger } from './services/logger';
 import { addHttps } from './https';
 import {
   asyncHandler,
@@ -21,12 +21,15 @@ import { AmmRoutes } from './amm/amm.routes';
 import { PangolinConfig } from './connectors/pangolin/pangolin.config';
 import { UniswapConfig } from './connectors/uniswap/uniswap.config';
 import { AvailableNetworks } from './services/config-manager-types';
+import morgan from 'morgan';
+import {ClobRoutes} from "./clob/clob.routes";
+import {SerumRoutes} from "./connectors/serum/serum.routes";
 
 const swaggerUi = require('swagger-ui-express');
 
+const childProcess = require('child_process');
+
 export const gatewayApp = express();
-let gatewayServer: Server;
-let swaggerServer: Server;
 
 // parse body for application/json
 gatewayApp.use(express.json());
@@ -34,14 +37,27 @@ gatewayApp.use(express.json());
 // parse url for application/x-www-form-urlencoded
 gatewayApp.use(express.urlencoded({ extended: true }));
 
+// logging middleware
+// skip logging path '/'
+gatewayApp.use(
+  morgan('combined', {
+    skip: function (req, _res) {
+      return req.path === '/';
+    },
+  })
+);
+
 // mount sub routers
+gatewayApp.use('/config', ConfigRoutes.router);
 gatewayApp.use('/network', NetworkRoutes.router);
 gatewayApp.use('/evm', EVMRoutes.router);
 gatewayApp.use('/connectors', ConnectorsRoutes.router);
 
 gatewayApp.use('/amm', AmmRoutes.router);
+gatewayApp.use('/clob', ClobRoutes.router);
 gatewayApp.use('/wallet', WalletRoutes.router);
 gatewayApp.use('/solana', SolanaRoutes.router);
+gatewayApp.use('/serum', SerumRoutes.router);
 
 // a simple route to test that the server is running
 gatewayApp.get('/', (_req: Request, res: Response) => {
@@ -63,50 +79,24 @@ gatewayApp.get(
   })
 );
 
-interface ConfigUpdateRequest {
-  configPath: string;
-  configValue: any;
-}
+// watch the exit even, spawn an independent process with the same args and
+// pass the stdio from this process to it.
+process.on('exit', function () {
+  childProcess.spawn(process.argv.shift(), process.argv, {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: 'inherit',
+  });
+});
 
 gatewayApp.post(
-  '/config/update',
-  asyncHandler(
-    async (
-      req: Request<unknown, unknown, ConfigUpdateRequest>,
-      res: Response
-    ) => {
-      const config = ConfigManagerV2.getInstance().get(req.body.configPath);
-      if (typeof req.body.configValue == 'string')
-        switch (typeof config) {
-          case 'number':
-            req.body.configValue = Number(req.body.configValue);
-            break;
-          case 'boolean':
-            req.body.configValue =
-              req.body.configValue.toLowerCase() === 'true';
-            break;
-        }
-      ConfigManagerV2.getInstance().set(
-        req.body.configPath,
-        req.body.configValue
-      );
-
-      logger.info('Reload logger to stdout.');
-      updateLoggerToStdout();
-
-      logger.info('Reloading Ethereum routes.');
-      // EthereumRoutes.reload();
-
-      logger.info('Reloading Solana routes.');
-      SolanaRoutes.reload();
-
-      logger.info('Restarting gateway.');
-      await stopGateway();
-      await startGateway();
-
-      res.status(200).json({ message: 'The config has been updated' });
-    }
-  )
+  '/restart',
+  asyncHandler(async (_req, res) => {
+    // kill the current process and trigger the exit event
+    process.exit();
+    // this is only to satisfy the compiler, it will never be called.
+    res.status(200).json();
+  })
 );
 
 // handle any error thrown in the gateway api route
@@ -147,7 +137,7 @@ export const startSwagger = async () => {
 
   swaggerApp.use('/', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-  swaggerServer = await swaggerApp.listen(swaggerPort);
+  await swaggerApp.listen(swaggerPort);
 };
 
 export const startGateway = async () => {
@@ -161,10 +151,10 @@ export const startGateway = async () => {
   logger.info(`⚡️ Gateway API listening on port ${port}`);
   if (ConfigManagerV2.getInstance().get('server.unsafeDevModeWithHTTP')) {
     logger.info('Running in UNSAFE HTTP! This could expose private keys.');
-    gatewayServer = await gatewayApp.listen(port);
+    await gatewayApp.listen(port);
   } else {
     try {
-      gatewayServer = await addHttps(gatewayApp).listen(port);
+      await addHttps(gatewayApp).listen(port);
     } catch (e) {
       logger.error(
         `Failed to start the server with https. Confirm that the SSL certificate files exist and are correct. Error: ${e}`
@@ -175,9 +165,4 @@ export const startGateway = async () => {
   }
 
   await startSwagger();
-};
-
-const stopGateway = async () => {
-  await swaggerServer.close();
-  return gatewayServer.close();
 };

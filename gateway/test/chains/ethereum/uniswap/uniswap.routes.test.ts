@@ -5,23 +5,42 @@ import { Ethereum } from '../../../../src/chains/ethereum/ethereum';
 import { Uniswap } from '../../../../src/connectors/uniswap/uniswap';
 import { AmmRoutes } from '../../../../src/amm/amm.routes';
 import { patch, unpatch } from '../../../services/patch';
+import { gasCostInEthString } from '../../../../src/services/base';
+import { OverrideConfigs } from '../../../config.util';
+import { patchEVMNonceManager } from '../../../evm.nonce.mock';
 
+const overrideConfigs = new OverrideConfigs();
 let app: Express;
 let ethereum: Ethereum;
 let uniswap: Uniswap;
 
 beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
   app = express();
   app.use(express.json());
+
   ethereum = Ethereum.getInstance('kovan');
+  patchEVMNonceManager(ethereum.nonceManager);
   await ethereum.init();
+
   uniswap = Uniswap.getInstance('ethereum', 'kovan');
   await uniswap.init();
+
   app.use('/amm', AmmRoutes.router);
 });
 
+beforeEach(() => {
+  patchEVMNonceManager(ethereum.nonceManager);
+});
 afterEach(() => {
   unpatch();
+});
+
+afterAll(async () => {
+  await ethereum.close();
+  await overrideConfigs.resetConfigs();
 });
 
 const address: string = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
@@ -29,7 +48,7 @@ const address: string = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
 const patchGetWallet = () => {
   patch(ethereum, 'getWallet', () => {
     return {
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     };
   });
 };
@@ -47,14 +66,14 @@ const patchStoredTokenList = () => {
         chainId: 42,
         name: 'WETH',
         symbol: 'WETH',
-        address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+        publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
         decimals: 18,
       },
       {
         chainId: 42,
         name: 'DAI',
         symbol: 'DAI',
-        address: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
+        publicKey: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
         decimals: 18,
       },
     ];
@@ -68,7 +87,7 @@ const patchGetTokenBySymbol = () => {
         chainId: 42,
         name: 'WETH',
         symbol: 'WETH',
-        address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+        publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
         decimals: 18,
       };
     } else {
@@ -76,7 +95,7 @@ const patchGetTokenBySymbol = () => {
         chainId: 42,
         name: 'DAI',
         symbol: 'DAI',
-        address: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
+        publicKey: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
         decimals: 18,
       };
     }
@@ -89,7 +108,7 @@ const patchGetTokenByAddress = () => {
       chainId: 42,
       name: 'WETH',
       symbol: 'WETH',
-      address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+      publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
       decimals: 18,
     };
   });
@@ -99,8 +118,8 @@ const patchGasPrice = () => {
   patch(ethereum, 'gasPrice', () => 100);
 };
 
-const patchPriceSwapOut = () => {
-  patch(uniswap, 'priceSwapOut', () => {
+const patchEstimateBuyTrade = () => {
+  patch(uniswap, 'estimateBuyTrade', () => {
     return {
       expectedAmount: {
         toSignificant: () => 100,
@@ -117,8 +136,8 @@ const patchPriceSwapOut = () => {
   });
 };
 
-const patchPriceSwapIn = () => {
-  patch(uniswap, 'priceSwapIn', () => {
+const patchEstimateSellTrade = () => {
+  patch(uniswap, 'estimateSellTrade', () => {
     return {
       expectedAmount: {
         toSignificant: () => 100,
@@ -151,7 +170,7 @@ describe('POST /amm/price', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapOut();
+    patchEstimateBuyTrade();
     patchGetNonce();
     patchExecuteTrade();
 
@@ -169,7 +188,8 @@ describe('POST /amm/price', () => {
       .set('Accept', 'application/json')
       .expect(200)
       .then((res: any) => {
-        expect(res.body.amount).toEqual('10000');
+        expect(res.body.amount).toEqual('10000.000000000000000000');
+        expect(res.body.rawAmount).toEqual('10000000000000000000000');
       });
   });
 
@@ -180,7 +200,7 @@ describe('POST /amm/price', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapIn();
+    patchEstimateSellTrade();
     patchGetNonce();
     patchExecuteTrade();
 
@@ -198,7 +218,8 @@ describe('POST /amm/price', () => {
       .set('Accept', 'application/json')
       .expect(200)
       .then((res: any) => {
-        expect(res.body.amount).toEqual('10000');
+        expect(res.body.amount).toEqual('10000.000000000000000000');
+        expect(res.body.rawAmount).toEqual('10000000000000000000000');
       });
   });
 
@@ -348,7 +369,7 @@ describe('POST /amm/trade', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapOut();
+    patchEstimateBuyTrade();
     patchGetNonce();
     patchExecuteTrade();
   };
@@ -363,7 +384,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
       })
@@ -385,7 +406,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
       })
       .set('Accept', 'application/json')
@@ -403,7 +424,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -420,7 +441,7 @@ describe('POST /amm/trade', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapIn();
+    patchEstimateSellTrade();
     patchGetNonce();
     patchExecuteTrade();
   };
@@ -435,7 +456,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
       })
@@ -457,7 +478,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -478,10 +499,10 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
-        limitPrice: '999999999999999999999',
+        limitPrice: '9',
       })
       .set('Accept', 'application/json')
       .expect(200);
@@ -498,7 +519,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         limitPrice: '999999999999999999999',
@@ -518,7 +539,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         limitPrice: '9',
@@ -527,7 +548,7 @@ describe('POST /amm/trade', () => {
       .expect(500);
   });
 
-  it('should return 500 for SELL with price smaller than limitPrice', async () => {
+  it('should return 500 for SELL with price higher than limitPrice', async () => {
     patchForSell();
     await request(app)
       .post(`/amm/trade`)
@@ -538,10 +559,10 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
-        limitPrice: '9',
+        limitPrice: '99999999999',
       })
       .set('Accept', 'application/json')
       .expect(500);
@@ -558,7 +579,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: 10000,
-        address: 'da8',
+        publicKey: 'da8',
         side: 'comprar',
       })
       .set('Accept', 'application/json')
@@ -583,7 +604,7 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -612,11 +633,50 @@ describe('POST /amm/trade', () => {
         quote: 'DAI',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         maxFeePerGas: '5000000000',
         maxPriorityFeePerGas: '5000000000',
+      })
+      .set('Accept', 'application/json')
+      .expect(500);
+  });
+});
+
+describe('POST /amm/estimateGas', () => {
+  it('should return 200 for valid connector', async () => {
+    patchInit();
+    patchGasPrice();
+
+    await request(app)
+      .post('/amm/estimateGas')
+      .send({
+        chain: 'ethereum',
+        network: 'kovan',
+        connector: 'uniswap',
+      })
+      .set('Accept', 'application/json')
+      .expect(200)
+      .then((res: any) => {
+        expect(res.body.network).toEqual('kovan');
+        expect(res.body.gasPrice).toEqual(100);
+        expect(res.body.gasCost).toEqual(
+          gasCostInEthString(100, uniswap.gasLimit)
+        );
+      });
+  });
+
+  it('should return 500 for invalid connector', async () => {
+    patchInit();
+    patchGasPrice();
+
+    await request(app)
+      .post('/amm/estimateGas')
+      .send({
+        chain: 'ethereum',
+        network: 'kovan',
+        connector: 'pangolin',
       })
       .set('Accept', 'application/json')
       .expect(500);

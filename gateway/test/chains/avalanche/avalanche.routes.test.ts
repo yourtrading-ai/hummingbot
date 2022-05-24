@@ -14,16 +14,31 @@ import * as transactionSuccesfulReceipt from '../ethereum//fixtures/transaction-
 import * as transactionOutOfGas from '../ethereum//fixtures/transaction-out-of-gas.json';
 import * as transactionOutOfGasReceipt from '../ethereum/fixtures/transaction-out-of-gas-receipt.json';
 import { Avalanche } from '../../../src/chains/avalanche/avalanche';
+import { OverrideConfigs } from '../../config.util';
 
-const avalanche = Avalanche.getInstance('fuji');
-afterEach(unpatch);
+const overrideConfigs = new OverrideConfigs();
+let avalanche: Avalanche;
 
 const address: string = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
+
+beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
+  avalanche = Avalanche.getInstance('fuji');
+});
+
+afterAll(async () => {
+  await overrideConfigs.resetConfigs();
+  await avalanche.close();
+});
+
+afterEach(unpatch);
 
 const patchGetWallet = () => {
   patch(avalanche, 'getWallet', () => {
     return {
-      address,
+      publicKey: publicKey,
     };
   });
 };
@@ -36,7 +51,7 @@ const patchGetTokenBySymbol = () => {
   patch(avalanche, 'getTokenBySymbol', () => {
     return {
       chainId: 43114,
-      address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
+      publicKey: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
       decimals: 18,
       name: 'Wrapped AVAX',
       symbol: 'WAVAX',
@@ -92,7 +107,7 @@ describe('POST /evm/nonce', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address,
+        publicKey: publicKey,
       })
       .set('Accept', 'application/json')
       .expect('Content-Type', /json/)
@@ -106,7 +121,7 @@ describe('POST /evm/nonce', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address: 'da857cbda0ba96757fed842617a4',
+        publicKey: 'da857cbda0ba96757fed842617a4',
       })
       .expect(404);
   });
@@ -116,7 +131,7 @@ describe('POST /evm/approve', () => {
   it('should return 200', async () => {
     patchGetWallet();
     avalanche.getContract = jest.fn().mockReturnValue({
-      address,
+      publicKey: publicKey,
     });
     patch(avalanche.nonceManager, 'getNonce', () => 115);
     patchGetTokenBySymbol();
@@ -127,7 +142,7 @@ describe('POST /evm/approve', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address,
+        publicKey: publicKey,
         spender: 'pangolin',
         token: 'PNG',
       })
@@ -145,7 +160,7 @@ describe('POST /evm/approve', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address,
+        publicKey: publicKey,
         spender: 'pangolin',
         token: 123,
         nonce: '23',
@@ -161,7 +176,7 @@ describe('POST /evm/allowances', () => {
     const spender = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
     avalanche.getSpender = jest.fn().mockReturnValue(spender);
     avalanche.getContract = jest.fn().mockReturnValue({
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     });
     patchGetERC20Allowance();
 
@@ -170,7 +185,7 @@ describe('POST /evm/allowances', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
         spender: spender,
         tokenSymbols: ['WETH', 'DAI'],
       })
@@ -190,7 +205,7 @@ describe('POST /network/balances', () => {
     patchGetNativeBalance();
     patchGetERC20Balance();
     avalanche.getContract = jest.fn().mockReturnValue({
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     });
 
     await request(gatewayApp)
@@ -198,7 +213,7 @@ describe('POST /network/balances', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
         tokenSymbols: ['WETH', 'DAI'],
       })
       .set('Accept', 'application/json')
@@ -213,7 +228,7 @@ describe('POST /evm/cancel', () => {
   it('should return 200', async () => {
     // override getWallet (network call)
     avalanche.getWallet = jest.fn().mockReturnValue({
-      address,
+      publicKey: publicKey,
     });
 
     avalanche.cancelTx = jest.fn().mockReturnValue({
@@ -225,7 +240,7 @@ describe('POST /evm/cancel', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address,
+        publicKey: publicKey,
         nonce: 23,
       })
       .set('Accept', 'application/json')
@@ -244,7 +259,7 @@ describe('POST /evm/cancel', () => {
       .send({
         chain: 'avalanche',
         network: 'fuji',
-        address: '',
+        publicKey: '',
         nonce: '23',
       })
       .expect(404);

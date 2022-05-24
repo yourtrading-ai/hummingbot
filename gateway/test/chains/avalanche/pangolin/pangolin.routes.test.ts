@@ -3,18 +3,36 @@ import { patch, unpatch } from '../../../services/patch';
 import { gatewayApp } from '../../../../src/app';
 import { Avalanche } from '../../../../src/chains/avalanche/avalanche';
 import { Pangolin } from '../../../../src/connectors/pangolin/pangolin';
+import { OverrideConfigs } from '../../../config.util';
+import { patchEVMNonceManager } from '../../../evm.nonce.mock';
+
+const overrideConfigs = new OverrideConfigs();
 let avalanche: Avalanche;
 let pangolin: Pangolin;
 
 beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
   avalanche = Avalanche.getInstance('fuji');
+  patchEVMNonceManager(avalanche.nonceManager);
   await avalanche.init();
+
   pangolin = Pangolin.getInstance('avalanche', 'fuji');
   await pangolin.init();
 });
 
+beforeEach(() => {
+  patchEVMNonceManager(avalanche.nonceManager);
+});
+
 afterEach(() => {
   unpatch();
+});
+
+afterAll(async () => {
+  await avalanche.close();
+  await overrideConfigs.resetConfigs();
 });
 
 const address: string = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
@@ -22,7 +40,7 @@ const address: string = '0xFaA12FD102FE8623C9299c72B03E45107F2772B5';
 const patchGetWallet = () => {
   patch(avalanche, 'getWallet', () => {
     return {
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     };
   });
 };
@@ -34,14 +52,14 @@ const patchStoredTokenList = () => {
         chainId: 43114,
         name: 'WETH',
         symbol: 'WETH',
-        address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+        publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
         decimals: 18,
       },
       {
         chainId: 43114,
         name: 'Wrapped AVAX',
         symbol: 'WAVAX',
-        address: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
+        publicKey: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
         decimals: 18,
       },
     ];
@@ -55,7 +73,7 @@ const patchGetTokenBySymbol = () => {
         chainId: 43114,
         name: 'WETH',
         symbol: 'WETH',
-        address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+        publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
         decimals: 18,
       };
     } else {
@@ -63,7 +81,7 @@ const patchGetTokenBySymbol = () => {
         chainId: 42,
         name: 'WAVAX',
         symbol: 'WAVAX',
-        address: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
+        publicKey: '0x4f96fe3b7a6cf9725f59d353f723c1bdb64ca6aa',
         decimals: 18,
       };
     }
@@ -76,7 +94,7 @@ const patchGetTokenByAddress = () => {
       chainId: 43114,
       name: 'WETH',
       symbol: 'WETH',
-      address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+      publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
       decimals: 18,
     };
   });
@@ -86,8 +104,8 @@ const patchGasPrice = () => {
   patch(avalanche, 'gasPrice', () => 100);
 };
 
-const patchPriceSwapOut = () => {
-  patch(pangolin, 'priceSwapOut', () => {
+const patchEstimateBuyTrade = () => {
+  patch(pangolin, 'estimateBuyTrade', () => {
     return {
       expectedAmount: {
         toSignificant: () => 100,
@@ -104,8 +122,8 @@ const patchPriceSwapOut = () => {
   });
 };
 
-const patchPriceSwapIn = () => {
-  patch(pangolin, 'priceSwapIn', () => {
+const patchEstimateSellTrade = () => {
+  patch(pangolin, 'estimateSellTrade', () => {
     return {
       expectedAmount: {
         toSignificant: () => 100,
@@ -137,7 +155,7 @@ describe('POST /amm/price', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapOut();
+    patchEstimateBuyTrade();
     patchGetNonce();
     patchExecuteTrade();
 
@@ -155,7 +173,8 @@ describe('POST /amm/price', () => {
       .set('Accept', 'application/json')
       .expect(200)
       .then((res: any) => {
-        expect(res.body.amount).toEqual('10000');
+        expect(res.body.amount).toEqual('10000.000000000000000000');
+        expect(res.body.rawAmount).toEqual('10000000000000000000000');
       });
   });
 
@@ -165,7 +184,7 @@ describe('POST /amm/price', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapIn();
+    patchEstimateSellTrade();
     patchGetNonce();
     patchExecuteTrade();
 
@@ -183,7 +202,8 @@ describe('POST /amm/price', () => {
       .set('Accept', 'application/json')
       .expect(200)
       .then((res: any) => {
-        expect(res.body.amount).toEqual('10000');
+        expect(res.body.amount).toEqual('10000.000000000000000000');
+        expect(res.body.rawAmount).toEqual('10000000000000000000000');
       });
   });
 
@@ -196,7 +216,7 @@ describe('POST /amm/price', () => {
           chainId: 43114,
           name: 'WETH',
           symbol: 'WETH',
-          address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+          publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
           decimals: 18,
         };
       } else {
@@ -229,7 +249,7 @@ describe('POST /amm/price', () => {
           chainId: 43114,
           name: 'WETH',
           symbol: 'WETH',
-          address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+          publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
           decimals: 18,
         };
       } else {
@@ -261,7 +281,7 @@ describe('POST /amm/trade', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapOut();
+    patchEstimateBuyTrade();
     patchGetNonce();
     patchExecuteTrade();
   };
@@ -276,7 +296,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
       })
@@ -298,7 +318,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
       })
       .set('Accept', 'application/json')
@@ -316,7 +336,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -332,7 +352,7 @@ describe('POST /amm/trade', () => {
     patchGetTokenBySymbol();
     patchGetTokenByAddress();
     patchGasPrice();
-    patchPriceSwapIn();
+    patchEstimateSellTrade();
     patchGetNonce();
     patchExecuteTrade();
   };
@@ -347,7 +367,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
       })
@@ -369,7 +389,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -389,7 +409,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: 10000,
-        address: 'da8',
+        publicKey: 'da8',
         side: 'comprar',
       })
       .set('Accept', 'application/json')
@@ -404,7 +424,7 @@ describe('POST /amm/trade', () => {
           chainId: 43114,
           name: 'WETH',
           symbol: 'WETH',
-          address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+          publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
           decimals: 18,
         };
       } else {
@@ -421,7 +441,7 @@ describe('POST /amm/trade', () => {
         quote: 'WETH',
         base: 'BITCOIN',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -439,7 +459,7 @@ describe('POST /amm/trade', () => {
           chainId: 43114,
           name: 'WETH',
           symbol: 'WETH',
-          address: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
+          publicKey: '0xd0A1E359811322d97991E03f863a0C30C2cF029C',
           decimals: 18,
         };
       } else {
@@ -456,7 +476,7 @@ describe('POST /amm/trade', () => {
         quote: 'BITCOIN',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         maxFeePerGas: '5000000000',
@@ -477,10 +497,10 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
-        limitPrice: '999999999999999999999',
+        limitPrice: '9',
       })
       .set('Accept', 'application/json')
       .expect(200);
@@ -497,7 +517,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         limitPrice: '999999999999999999999',
@@ -506,7 +526,7 @@ describe('POST /amm/trade', () => {
       .expect(200);
   });
 
-  it('should return 200 for SELL with price less than limitPrice', async () => {
+  it('should return 200 for SELL with price higher than limitPrice', async () => {
     patchForSell();
     await request(gatewayApp)
       .post(`/amm/trade`)
@@ -517,10 +537,10 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'SELL',
         nonce: 21,
-        limitPrice: '9',
+        limitPrice: '99999999999',
       })
       .set('Accept', 'application/json')
       .expect(500);
@@ -537,7 +557,7 @@ describe('POST /amm/trade', () => {
         quote: 'WAVAX',
         base: 'WETH',
         amount: '10000',
-        address,
+        publicKey: publicKey,
         side: 'BUY',
         nonce: 21,
         limitPrice: '9',

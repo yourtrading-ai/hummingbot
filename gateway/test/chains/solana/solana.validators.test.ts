@@ -1,10 +1,6 @@
-import {
-  isPublicKey,
-  validatePublicKey,
-  invalidPublicKeyError,
-} from '../../../src/chains/solana/solana.validators';
-import { missingParameter } from '../../../src/services/validators';
 import 'jest-extended';
+import { invalidPublicKeyError, isPublicKey, validatePublicKey, } from '../../../src/chains/solana/solana.validators';
+import { missingParameter } from '../../../src/services/validators';
 
 export const publicKey = '3xgEFpNpz1hPU7iHN9P3WPgLTWfZXu6wSUuGw8kigNQr';
 export const privateKey =
@@ -28,7 +24,7 @@ describe('validatePublicKey', () => {
   it('valid when req.publicKey is a publicKey', () => {
     expect(
       validatePublicKey({
-        address: publicKey,
+        publicKey: publicKey,
       })
     ).toEqual([]);
   });
@@ -44,7 +40,7 @@ describe('validatePublicKey', () => {
   it('return error when req.publicKey is invalid', () => {
     expect(
       validatePublicKey({
-        address: 'world',
+        publicKey: 'world',
       })
     ).toEqual([invalidPublicKeyError]);
   });

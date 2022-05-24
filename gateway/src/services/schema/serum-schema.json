@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "network": { "type": "string" },
+    "networks": {
+      "type": "object",
+      "patternProperties": {
+        "^..+$": {
+          "type": "object",
+          "properties": {
+            "rpcURL": { "type": "string" }
+          },
+          "required": ["rpcURL"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "parallel": {
+      "type": "object",
+      "required": ["all"],
+      "properties": {
+        "all": {
+          "type": "object",
+          "required": ["batchSize", "delayBetweenBatches"],
+          "properties": {
+            "batchSize": { "type": "integer" },
+            "delayBetweenBatches": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "required": ["markets"],
+      "properties": {
+        "markets": {
+          "type": "integer"
+        }
+      }
+    },
+    "markets": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string" },
+        "blacklist": {
+          "type": "array"
+        },
+        "whitelist": {
+          "type": "array"
+        }
+      }
+    },
+    "tickers": {
+      "type": "object",
+      "required": ["source", "url"],
+      "properties": {
+        "source": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    }
+  },
+  "required": [
+    "network",
+    "networks",
+    "markets",
+    "tickers",
+    "parallel",
+    "cache"
+  ],
+  "additionalProperties": false
+}

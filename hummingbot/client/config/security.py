@@ -1,24 +1,27 @@
+import asyncio
+from enum import Enum
+from os import unlink
+
+import base58
+
 from hummingbot.client.config.config_crypt import (
-    list_encrypted_file_paths,
     decrypt_file,
-    secure_config_key,
-    encrypted_file_exists,
     encrypt_n_save_config_value,
-    encrypted_file_path
-)
-from hummingbot.core.utils.wallet_setup import (
-    list_wallets,
-    unlock_wallet,
-    import_and_save_wallet,
-    import_and_save_sol_wallet
+    encrypted_file_exists,
+    encrypted_file_path,
+    list_encrypted_file_paths,
+    secure_config_key,
 )
 from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.settings import AllConnectorSettings
-from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.core.utils.async_call_scheduler import AsyncCallScheduler
-import asyncio
-from os import unlink
-from enum import Enum
+from hummingbot.core.utils.async_utils import safe_ensure_future
+from hummingbot.core.utils.wallet_setup import (
+    import_and_save_sol_wallet,
+    import_and_save_wallet,
+    list_wallets,
+    unlock_wallet,
+)
 
 
 class WalletType(Enum):
@@ -85,7 +88,7 @@ class Security:
     @classmethod
     def unlock_wallet(cls, public_key):
         if public_key not in cls._private_keys:
-            cls._private_keys[public_key] = unlock_wallet(public_key=public_key, password=Security.password)
+            cls._private_keys[public_key] = unlock_wallet(wallet_address=public_key, password=Security.password)
         return cls._private_keys[public_key]
 
     @classmethod

@@ -1,12 +1,16 @@
 jest.useFakeTimers();
 import { UniswapV3 } from '../../../../src/connectors/uniswap/uniswap.v3';
 import { patch, unpatch } from '../../../services/patch';
+import { UniswapishPriceError } from '../../../../src/services/error-handler';
 import { Token } from '@uniswap/sdk-core';
 import * as uniV3 from '@uniswap/v3-sdk';
 import { BigNumber, Contract, Transaction, Wallet } from 'ethers';
 import { Ethereum } from '../../../../src/chains/ethereum/ethereum';
 import { UniswapV3Helper } from '../../../../src/connectors/uniswap/uniswap.v3.helper';
+import { OverrideConfigs } from '../../../config.util';
+import { patchEVMNonceManager } from '../../../evm.nonce.mock';
 
+const overrideConfigs = new OverrideConfigs();
 let ethereum: Ethereum;
 let uniswapV3: UniswapV3;
 let uniswapV3Helper: UniswapV3Helper;
@@ -33,13 +37,13 @@ const USDC = new Token(
 const TICK_PROVIDER = [
   {
     index: -887270,
-    liquidityNet: 118445039955967015140,
-    liquidityGross: 118445039955967015140,
+    liquidityNet: '118445039955967015140',
+    liquidityGross: '118445039955967015140',
   },
   {
     index: 887270,
-    liquidityNet: -118445039955967015140,
-    liquidityGross: 118445039955967015140,
+    liquidityNet: '-118445039955967015140',
+    liquidityGross: '118445039955967015140',
   },
 ];
 const TX = {
@@ -76,19 +80,34 @@ const DAI_USDC_POOL = new uniV3.Pool(
 );
 
 beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
   ethereum = Ethereum.getInstance('kovan');
+  patchEVMNonceManager(ethereum.nonceManager);
   await ethereum.init();
+
   wallet = new Wallet(
     '0000000000000000000000000000000000000000000000000000000000000002', // noqa: mock
     ethereum.provider
   );
+
   uniswapV3 = UniswapV3.getInstance('ethereum', 'kovan');
   await uniswapV3.init();
   uniswapV3Helper = new UniswapV3Helper('kovan');
 });
 
+beforeEach(() => {
+  patchEVMNonceManager(ethereum.nonceManager);
+});
+
 afterEach(() => {
   unpatch();
+});
+
+afterAll(async () => {
+  await ethereum.close();
+  await overrideConfigs.resetConfigs();
 });
 
 const patchFetchPairData = (noPath?: boolean) => {
@@ -99,8 +118,8 @@ const patchFetchPairData = (noPath?: boolean) => {
           WETH,
           USDC,
           500,
-          1390012087572052304381352642,
-          6025055903594410671025,
+          '1390012087572052304381352642',
+          '6025055903594410671025',
           -80865,
           TICK_PROVIDER
         ),
@@ -111,8 +130,8 @@ const patchFetchPairData = (noPath?: boolean) => {
         WETH,
         DAI,
         500,
-        1390012087572052304381352642,
-        6025055903594410671025,
+        '1390012087572052304381352642',
+        '6025055903594410671025',
         -80865,
         TICK_PROVIDER
       ),
@@ -138,7 +157,7 @@ const patchPoolState = () => {
         ];
       },
       ticks() {
-        return [118445039955967015140, 118445039955967015140];
+        return ['118445039955967015140', '118445039955967015140'];
       },
     };
   });
@@ -162,7 +181,7 @@ const patchHelperPoolState = () => {
         ];
       },
       ticks() {
-        return [118445039955967015140, 118445039955967015140];
+        return ['118445039955967015140', '118445039955967015140'];
       },
     };
   });
@@ -200,7 +219,7 @@ describe('verify UniswapV3 priceSwapIn', () => {
   it('Should return an ExpectedTrade when available', async () => {
     patchFetchPairData();
 
-    const expectedTrade = await uniswapV3.priceSwapIn(
+    const expectedTrade = await uniswapV3.estimateSellTrade(
       WETH,
       DAI,
       BigNumber.from(1)
@@ -209,15 +228,12 @@ describe('verify UniswapV3 priceSwapIn', () => {
     expect(expectedTrade).toHaveProperty('expectedAmount');
   });
 
-  it('Should return an error if no pair is available', async () => {
+  it('Should throw an error if no pair is available', async () => {
     patchFetchPairData(true);
 
-    const expectedTrade = await uniswapV3.priceSwapIn(
-      WETH,
-      DAI,
-      BigNumber.from(1)
-    );
-    expect(typeof expectedTrade).toBe('string');
+    await expect(async () => {
+      await uniswapV3.estimateSellTrade(WETH, DAI, BigNumber.from(1));
+    }).rejects.toThrow(UniswapishPriceError);
   });
 });
 
@@ -225,7 +241,7 @@ describe('verify UniswapV3 priceSwapOut', () => {
   it('Should return an ExpectedTrade when available', async () => {
     patchFetchPairData();
 
-    const expectedTrade = await uniswapV3.priceSwapOut(
+    const expectedTrade = await uniswapV3.estimateBuyTrade(
       WETH,
       DAI,
       BigNumber.from(1)
@@ -234,15 +250,12 @@ describe('verify UniswapV3 priceSwapOut', () => {
     expect(expectedTrade).toHaveProperty('expectedAmount');
   });
 
-  it('Should return an error if no pair is available', async () => {
+  it('Should throw an error if no pair is available', async () => {
     patchFetchPairData(true);
 
-    const expectedTrade = await uniswapV3.priceSwapOut(
-      WETH,
-      DAI,
-      BigNumber.from(1)
-    );
-    expect(typeof expectedTrade).toBe('string');
+    await expect(async () => {
+      await uniswapV3.estimateBuyTrade(WETH, DAI, BigNumber.from(1));
+    }).rejects.toThrow(UniswapishPriceError);
   });
 });
 
@@ -318,7 +331,7 @@ describe('verify UniswapV3 Nft functions', () => {
       BigNumber.from(5),
       '6'
     );
-    expect(overrides.gasLimit).toEqual(1);
+    expect(overrides.gasLimit).toEqual('1');
     expect(overrides.gasPrice).toBeUndefined();
     expect(overrides.nonce).toEqual(3);
     expect(overrides.maxFeePerGas as BigNumber).toEqual(BigNumber.from(4));

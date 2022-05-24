@@ -1,12 +1,13 @@
 import abi from '../../services/ethereum.abi.json';
 import axios from 'axios';
 import { logger } from '../../services/logger';
-import { Contract, Transaction, Wallet } from 'ethers';
+import { BigNumber, Contract, Transaction, Wallet } from 'ethers';
 import { EthereumBase } from '../../services/ethereum-base';
 import { EthereumConfig, getEthereumConfig } from './ethereum.config';
 import { Provider } from '@ethersproject/abstract-provider';
 import { UniswapConfig } from '../../connectors/uniswap/uniswap.config';
 import { Ethereumish } from '../../services/common-interfaces';
+import { ConfigManagerV2 } from '../../services/config-manager-v2';
 
 // MKR does not match the ERC20 perfectly so we need to use a separate ABI.
 const MKR_ADDRESS = '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2';
@@ -15,6 +16,7 @@ export class Ethereum extends EthereumBase implements Ethereumish {
   private static _instances: { [name: string]: Ethereum };
   private _ethGasStationUrl: string;
   private _gasPrice: number;
+  private _gasPriceRefreshInterval: number | null;
   private _gasPriceLastUpdated: Date | null;
   private _nativeTokenSymbol: string;
   private _chain: string;
@@ -29,7 +31,10 @@ export class Ethereum extends EthereumBase implements Ethereumish {
       config.network.nodeURL + config.nodeAPIKey,
       config.network.tokenListSource,
       config.network.tokenListType,
-      config.manualGasPrice
+      config.manualGasPrice,
+      config.gasLimit,
+      ConfigManagerV2.getInstance().get('database.nonceDbPath'),
+      ConfigManagerV2.getInstance().get('database.transactionDbPath')
     );
     this._chain = network;
     this._nativeTokenSymbol = config.nativeCurrencySymbol;
@@ -38,6 +43,10 @@ export class Ethereum extends EthereumBase implements Ethereumish {
       EthereumConfig.ethGasStationConfig.APIKey;
 
     this._gasPrice = config.manualGasPrice;
+    this._gasPriceRefreshInterval =
+      config.network.gasPriceRefreshInterval !== undefined
+        ? config.network.gasPriceRefreshInterval
+        : null;
     this._gasPriceLastUpdated = null;
 
     this.updateGasPrice();
@@ -103,21 +112,49 @@ export class Ethereum extends EthereumBase implements Ethereumish {
     return this._metricsLogInterval;
   }
 
-  // If ConfigManager.config.ETH_GAS_STATION_ENABLE is true this will
-  // continually update the gas price.
+  /**
+   * Automatically update the prevailing gas price on the network.
+   *
+   * If ethGasStationConfig.enable is true, and the network is mainnet, then
+   * the gas price will be updated from ETH gas station.
+   *
+   * Otherwise, it'll obtain the prevailing gas price from the connected
+   * ETH node.
+   */
   async updateGasPrice(): Promise<void> {
-    if (EthereumConfig.ethGasStationConfig.enabled) {
+    if (this._gasPriceRefreshInterval === null) {
+      return;
+    }
+
+    if (
+      EthereumConfig.ethGasStationConfig.enabled &&
+      this._chain === 'mainnet'
+    ) {
       const { data } = await axios.get(this._ethGasStationUrl);
 
       // divide by 10 to convert it to Gwei
       this._gasPrice = data[EthereumConfig.ethGasStationConfig.gasLevel] / 10;
-      this._gasPriceLastUpdated = new Date();
-
-      setTimeout(
-        this.updateGasPrice.bind(this),
-        EthereumConfig.ethGasStationConfig.refreshTime * 1000
-      );
+    } else {
+      this._gasPrice = await this.getGasPriceFromEthereumNode();
     }
+
+    this._gasPriceLastUpdated = new Date();
+    setTimeout(
+      this.updateGasPrice.bind(this),
+      this._gasPriceRefreshInterval * 1000
+    );
+  }
+
+  /**
+   * Get the base gas fee and the current max priority fee from the Ethereum
+   * node, and add them together.
+   */
+  async getGasPriceFromEthereumNode(): Promise<number> {
+    const baseFee: BigNumber = await this.provider.getGasPrice();
+    const priorityFee: BigNumber = BigNumber.from(
+      await this.provider.send('eth_maxPriorityFeePerGas', [])
+    );
+    return baseFee.add(priorityFee).toNumber() * 1e-9;
   }
 
   getContract(
@@ -144,6 +181,13 @@ export class Ethereum extends EthereumBase implements Ethereumish {
     logger.info(
       'Canceling any existing transaction(s) with nonce number ' + nonce + '.'
     );
-    return super.cancelTx(wallet, nonce, this._gasPrice);
+    return this.cancelTxWithGasPrice(wallet, nonce, this._gasPrice * 2);
+  }
+
+  async close() {
+    await super.close();
+    if (this._chain in Ethereum._instances) {
+      delete Ethereum._instances[this._chain];
+    }
   }
 }

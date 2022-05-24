@@ -12,7 +12,8 @@
             "nodeURL": { "type": "string" },
             "tokenListType": { "type": "string" },
             "tokenListSource": { "type": "string" },
-            "nativeCurrencySymbol": { "type": "string" }
+            "nativeCurrencySymbol": { "type": "string" },
+            "gasPriceRefreshInterval": { "type": "number" }
           },
           "required": [
             "chainID",
@@ -27,7 +28,8 @@
       "additionalProperties": false
     },
     "nodeAPIKey": { "type": "string" },
-    "manualGasPrice": { "type": "integer" }
+    "manualGasPrice": { "type": "integer" },
+    "gasLimit": { "type": "integer" }
   },
   "additionalProperties": false
 }

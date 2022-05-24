@@ -1,7 +1,7 @@
 import { BigNumber } from 'ethers';
 import { Harmony } from '../../../src/chains/harmony/harmony';
 import { patch, unpatch } from '../../services/patch';
-import { Token } from '../../../src/services/ethereum-base';
+import { TokenInfo } from '../../../src/services/ethereum-base';
 import {
   nonce,
   getTokenSymbolsToTokens,
@@ -18,16 +18,35 @@ import {
   TOKEN_NOT_SUPPORTED_ERROR_MESSAGE,
   TOKEN_NOT_SUPPORTED_ERROR_CODE,
 } from '../../../src/services/error-handler';
+import { OverrideConfigs } from '../../config.util';
+import { patchEVMNonceManager } from '../../evm.nonce.mock';
 
 jest.useFakeTimers();
 
+const overrideConfigs = new OverrideConfigs();
 let harmony: Harmony;
+
 beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
   harmony = Harmony.getInstance('testnet');
+  patchEVMNonceManager(harmony.nonceManager);
   await harmony.init();
 });
 
-afterEach(() => unpatch());
+beforeEach(() => {
+  patchEVMNonceManager(harmony.nonceManager);
+});
+
+afterEach(() => {
+  unpatch();
+});
+
+afterAll(async () => {
+  await harmony.close();
+  await overrideConfigs.resetConfigs();
+});
 
 const zeroAddress =
   '0000000000000000000000000000000000000000000000000000000000000000'; // noqa: mock
@@ -36,7 +55,7 @@ describe('nonce', () => {
   it('return a nonce for a wallet', async () => {
     patch(harmony, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
     patch(harmony.nonceManager, 'getNonce', () => 2);
@@ -49,7 +68,7 @@ describe('nonce', () => {
   });
 });
 
-const wone: Token = {
+const wone: TokenInfo = {
   chainId: 1666700000,
   name: '"Wrapped ONE',
   symbol: 'WONE',
@@ -71,7 +90,7 @@ describe('allowances', () => {
   it('return allowances for an owner, spender and tokens', async () => {
     patch(harmony, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 
@@ -109,14 +128,14 @@ describe('approve', () => {
       return sushiswap;
     });
     harmony.getContract = jest.fn().mockReturnValue({
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     });
 
     patch(harmony, 'ready', () => true);
 
     patch(harmony, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 
@@ -175,7 +194,7 @@ describe('approve', () => {
 
     patch(harmony, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 

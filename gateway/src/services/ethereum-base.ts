@@ -1,7 +1,6 @@
 import {
   BigNumber,
   Contract,
-  logger,
   providers,
   Transaction,
   utils,
@@ -16,9 +15,11 @@ import NodeCache from 'node-cache';
 import { EvmTxStorage } from './evm.tx-storage';
 import fse from 'fs-extra';
 import { ConfigManagerCertPassphrase } from './config-manager-cert-passphrase';
+import { logger } from './logger';
+import { ReferenceCountingCloseable } from './refcounting-closeable';
 
 // information about an Ethereum token
-export interface Token {
+export interface TokenInfo {
   chainId: number;
   address: string;
   name: string;
@@ -32,8 +33,8 @@ export type NewDebugMsgHandler = (msg: any) => void;
 
 export class EthereumBase {
   private _provider;
-  protected tokenList: Token[] = [];
-  private _tokenMap: Record<string, Token> = {};
+  protected tokenList: TokenInfo[] = [];
+  private _tokenMap: Record<string, TokenInfo> = {};
   // there are async values set in the constructor
   private _ready: boolean = false;
   private _initializing: boolean = false;
@@ -43,11 +44,13 @@ export class EthereumBase {
   public chainId;
   public rpcUrl;
   public gasPriceConstant;
+  private _gasLimit;
   public tokenListSource: string;
   public tokenListType: TokenListType;
   public cache: NodeCache;
-  private _nonceManager: EVMNonceManager;
-  private _txStorage: EvmTxStorage;
+  private readonly _refCountingHandle: string;
+  private readonly _nonceManager: EVMNonceManager;
+  private readonly _txStorage: EvmTxStorage;
 
   constructor(
     chainName: string,
@@ -55,7 +58,10 @@ export class EthereumBase {
     rpcUrl: string,
     tokenListSource: string,
     tokenListType: TokenListType,
-    gasPriceConstant: number
+    gasPriceConstant: number,
+    gasLimit: number,
+    nonceDbPath: string,
+    transactionDbPath: string
   ) {
     this._provider = new providers.StaticJsonRpcProvider(rpcUrl);
     this.chainName = chainName;
@@ -64,10 +70,16 @@ export class EthereumBase {
     this.gasPriceConstant = gasPriceConstant;
     this.tokenListSource = tokenListSource;
     this.tokenListType = tokenListType;
-    this._nonceManager = new EVMNonceManager(chainName, chainId, 60);
-    this._nonceManager.init(this.provider);
+
+    this._refCountingHandle = ReferenceCountingCloseable.createHandle();
+    this._nonceManager = new EVMNonceManager(chainName, chainId, nonceDbPath);
+    this._nonceManager.declareOwnership(this._refCountingHandle);
     this.cache = new NodeCache({ stdTTL: 3600 }); // set default cache ttl to 1hr
-    this._txStorage = new EvmTxStorage('transactions.level');
+    this._gasLimit = gasLimit;
+    this._txStorage = EvmTxStorage.getInstance(
+      transactionDbPath,
+      this._refCountingHandle
+    );
   }
 
   ready(): boolean {
@@ -76,6 +88,10 @@ export class EthereumBase {
 
   public get provider() {
     return this._provider;
+  }
+
+  public get gasLimit() {
+    return this._gasLimit;
   }
 
   public events() {
@@ -95,6 +111,8 @@ export class EthereumBase {
   async init(): Promise<void> {
     if (!this.ready() && !this._initializing) {
       this._initializing = true;
+      await this._nonceManager.init(this.provider);
+
       this._initPromise = this.loadTokens(
         this.tokenListSource,
         this.tokenListType
@@ -113,7 +131,7 @@ export class EthereumBase {
     this.tokenList = await this.getTokenList(tokenListSource, tokenListType);
     if (this.tokenList) {
       this.tokenList.forEach(
-        (token: Token) => (this._tokenMap[token.symbol] = token)
+        (token: TokenInfo) => (this._tokenMap[token.symbol] = token)
       );
     }
   }
@@ -122,7 +140,7 @@ export class EthereumBase {
   async getTokenList(
     tokenListSource: string,
     tokenListType: TokenListType
-  ): Promise<Token[]> {
+  ): Promise<TokenInfo[]> {
     let tokens;
     if (tokenListType === 'URL') {
       ({
@@ -145,12 +163,12 @@ export class EthereumBase {
   // ethereum token lists are large. instead of reloading each time with
   // getTokenList, we can read the stored tokenList value from when the
   // object was initiated.
-  public get storedTokenList(): Token[] {
+  public get storedTokenList(): TokenInfo[] {
     return this.tokenList;
   }
 
   // return the Token object for a symbol
-  getTokenForSymbol(symbol: string): Token | null {
+  getTokenForSymbol(symbol: string): TokenInfo | null {
     return this._tokenMap[symbol] ? this._tokenMap[symbol] : null;
   }
 
@@ -203,8 +221,11 @@ export class EthereumBase {
     decimals: number
   ): Promise<TokenValue> {
     logger.info('Requesting balance for owner ' + wallet.address + '.');
-    const balance = await contract.balanceOf(wallet.address);
-    logger.info(balance);
+    const balance: BigNumber = await contract.balanceOf(wallet.address);
+    logger.info(
+      `Raw balance of ${contract.address} for ` +
+        `${wallet.address}: ${balance.toString()}`
+    );
     return { value: balance, decimals: decimals };
   }
 
@@ -284,14 +305,14 @@ export class EthereumBase {
       nonce = await this.nonceManager.getNonce(wallet.address);
     }
     const params: any = {
-      gasLimit: 100000,
+      gasLimit: '100000',
       nonce: nonce,
     };
     if (maxFeePerGas || maxPriorityFeePerGas) {
       params.maxFeePerGas = maxFeePerGas;
       params.maxPriorityFeePerGas = maxPriorityFeePerGas;
     } else if (gasPrice) {
-      params.gasPrice = (gasPrice * 1e9).toString();
+      params.gasPrice = (gasPrice * 1e9).toFixed(0);
     }
     const response = await contract.approve(spender, amount, params);
     logger.info(response);
@@ -299,9 +320,10 @@ export class EthereumBase {
     return response;
   }
 
-  public getTokenBySymbol(tokenSymbol: string): Token | undefined {
+  public getTokenBySymbol(tokenSymbol: string): TokenInfo | undefined {
     return this.tokenList.find(
-      (token: Token) => token.symbol.toUpperCase() === tokenSymbol.toUpperCase()
+      (token: TokenInfo) =>
+        token.symbol.toUpperCase() === tokenSymbol.toUpperCase()
     );
   }
 
@@ -311,7 +333,7 @@ export class EthereumBase {
   }
 
   // cancel transaction
-  async cancelTx(
+  async cancelTxWithGasPrice(
     wallet: Wallet,
     nonce: number,
     gasPrice: number
@@ -321,11 +343,17 @@ export class EthereumBase {
       to: wallet.address,
       value: utils.parseEther('0'),
       nonce: nonce,
-      gasPrice: gasPrice * 1e9 * 2,
+      gasPrice: (gasPrice * 1e9).toFixed(0),
     };
     const response = await wallet.sendTransaction(tx);
+    await this.nonceManager.commitNonce(wallet.address, nonce);
     logger.info(response);
 
     return response;
+  }
+
+  async close() {
+    await this._nonceManager.close(this._refCountingHandle);
+    await this._txStorage.close(this._refCountingHandle);
   }
 }

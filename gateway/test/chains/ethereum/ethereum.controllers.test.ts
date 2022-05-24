@@ -1,7 +1,7 @@
 import { BigNumber } from 'ethers';
 import { Ethereum } from '../../../src/chains/ethereum/ethereum';
 import { patch, unpatch } from '../../services/patch';
-import { Token } from '../../../src/services/ethereum-base';
+import { TokenInfo } from '../../../src/services/ethereum-base';
 import {
   nonce,
   getTokenSymbolsToTokens,
@@ -18,14 +18,35 @@ import {
   TOKEN_NOT_SUPPORTED_ERROR_MESSAGE,
   TOKEN_NOT_SUPPORTED_ERROR_CODE,
 } from '../../../src/services/error-handler';
+import { OverrideConfigs } from '../../config.util';
+import { patchEVMNonceManager } from '../../evm.nonce.mock';
 
+const overrideConfigs = new OverrideConfigs();
 let eth: Ethereum;
+
 beforeAll(async () => {
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
+
   eth = Ethereum.getInstance('kovan');
+
+  patchEVMNonceManager(eth.nonceManager);
+
   await eth.init();
 });
 
-afterEach(() => unpatch());
+beforeEach(() => {
+  patchEVMNonceManager(eth.nonceManager);
+});
+
+afterEach(() => {
+  unpatch();
+});
+
+afterAll(async () => {
+  await eth.close();
+  await overrideConfigs.resetConfigs();
+});
 
 const zeroAddress =
   '0000000000000000000000000000000000000000000000000000000000000000'; // noqa: mock
@@ -34,7 +55,7 @@ describe('nonce', () => {
   it('return a nonce for a wallet', async () => {
     patch(eth, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
     patch(eth.nonceManager, 'getNonce', () => 2);
@@ -47,7 +68,7 @@ describe('nonce', () => {
   });
 });
 
-const weth: Token = {
+const weth: TokenInfo = {
   chainId: 42,
   name: 'WETH',
   symbol: 'WETH',
@@ -69,7 +90,7 @@ describe('allowances', () => {
   it('return allowances for an owner, spender and tokens', async () => {
     patch(eth, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 
@@ -107,14 +128,14 @@ describe('approve', () => {
       return uniswap;
     });
     eth.getContract = jest.fn().mockReturnValue({
-      address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+      publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
     });
 
     patch(eth, 'ready', () => true);
 
     patch(eth, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 
@@ -173,7 +194,7 @@ describe('approve', () => {
 
     patch(eth, 'getWallet', () => {
       return {
-        address: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
+        publicKey: '0xFaA12FD102FE8623C9299c72B03E45107F2772B5',
       };
     });
 

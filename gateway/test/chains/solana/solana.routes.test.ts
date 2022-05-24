@@ -1,21 +1,22 @@
-import request from 'supertest';
-import { patch, unpatch } from '../../services/patch';
-import { gatewayApp } from '../../../src/app';
-import { Solana } from '../../../src/chains/solana/solana';
-import { publicKey, privateKey } from './solana.validators.test';
-import { tokenSymbols, txHash } from '../../services/validators.test';
-import { TransactionResponseStatusCode } from '../../../src/chains/solana/solana.requests';
-import * as getTransactionData from './fixtures/getTransaction.json';
-import getTokenAccountData from './fixtures/getTokenAccount';
-import getOrCreateAssociatedTokenAccountData from './fixtures/getOrCreateAssociatedTokenAccount';
-import * as getTokenListData from './fixtures/getTokenList.json';
 import { Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { BigNumber } from 'ethers';
+import request from 'supertest';
+import { gatewayApp } from '../../../src/app';
+import { Solana } from '../../../src/chains/solana/solana';
+import { TransactionResponseStatusCode } from '../../../src/chains/solana/solana.requests';
+import { patch, unpatch } from '../../services/patch';
+import { tokenSymbols, txHash } from '../../services/validators.test';
+import getOrCreateAssociatedTokenAccountData from './fixtures/getOrCreateAssociatedTokenAccount';
+import { default as config } from './fixtures/getSolanaConfig';
+import getTokenAccountData from './fixtures/getTokenAccount';
+import * as getTokenListData from './fixtures/getTokenList.json';
+import * as getTransactionData from './fixtures/getTransaction.json';
+import { privateKey, publicKey } from './solana.validators.test';
 
 let solana: Solana;
 beforeAll(async () => {
-  solana = Solana.getInstance();
+  solana = await Solana.getInstance(config.solana.network);
   solana.getTokenList = jest
     .fn()
     .mockReturnValue([
@@ -66,7 +67,7 @@ describe('POST /solana/balances', () => {
 
     await request(gatewayApp)
       .post(`/solana/balances`)
-      .send({ address: publicKey, tokenSymbols })
+      .send({ publicKey: publicKey, tokenSymbols })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -104,7 +105,7 @@ describe('GET /solana/token', () => {
 
     await request(gatewayApp)
       .get(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -125,7 +126,7 @@ describe('GET /solana/token', () => {
 
     await request(gatewayApp)
       .get(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -148,7 +149,7 @@ describe('GET /solana/token', () => {
 
     await request(gatewayApp)
       .get(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -168,7 +169,7 @@ describe('GET /solana/token', () => {
   it('should return 500 when token not found', async () => {
     await request(gatewayApp)
       .get(`/solana/token`)
-      .send({ token: 'not found', address: publicKey })
+      .send({ token: 'not found', publicKey: publicKey })
       .expect(500);
   });
   it('should return 404 when parameters are invalid', async () => {
@@ -194,7 +195,7 @@ describe('POST /solana/token', () => {
 
     await request(gatewayApp)
       .post(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -216,7 +217,7 @@ describe('POST /solana/token', () => {
 
     await request(gatewayApp)
       .post(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -240,7 +241,7 @@ describe('POST /solana/token', () => {
 
     await request(gatewayApp)
       .post(`/solana/token`)
-      .send({ token: tokenSymbols[0], address: publicKey })
+      .send({ token: tokenSymbols[0], publicKey: publicKey })
       .expect('Content-Type', /json/)
       .expect(200)
       .expect((res) => expect(res.body.network).toBe(solana.cluster))
@@ -259,7 +260,7 @@ describe('POST /solana/token', () => {
   it('should return 500 when token not found', async () => {
     await request(gatewayApp)
       .post(`/solana/token`)
-      .send({ token: 'not found', address: publicKey })
+      .send({ token: 'not found', publicKey: publicKey })
       .expect(500);
   });
   it('should return 404 when parameters are invalid', async () => {

@@ -1,15 +1,15 @@
 from decimal import Decimal
-from typing import (
-    Any,
-    Dict,
-    Optional,
-)
+from typing import Any, Dict, Optional
+
+from async_timeout import timeout
 
 from hummingbot.connector.in_flight_order_base import InFlightOrderBase
 from hummingbot.core.data_type.common import OrderType, TradeType
 
+GET_GATEWAY_EX_ORDER_ID_TIMEOUT = 30  # seconds
 
-class EthereumInFlightOrder(InFlightOrderBase):
+
+class GatewayInFlightOrder(InFlightOrderBase):
     def __init__(self,
                  client_order_id: str,
                  exchange_order_id: Optional[str],
@@ -20,7 +20,7 @@ class EthereumInFlightOrder(InFlightOrderBase):
                  amount: Decimal,
                  creation_timestamp: float,
                  gas_price: Decimal,
-                 initial_state: str = "OPEN"):
+                 initial_state: str = "PENDING_CREATE"):
         super().__init__(
             client_order_id,
             exchange_order_id,
@@ -35,6 +35,7 @@ class EthereumInFlightOrder(InFlightOrderBase):
         self.trade_id_set = set()
         self._gas_price = gas_price
         self.nonce = 0
+        self._cancel_tx_hash: Optional[str] = None
 
     @property
     def is_done(self) -> bool:
@@ -42,7 +43,7 @@ class EthereumInFlightOrder(InFlightOrderBase):
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> InFlightOrderBase:
-        retval = EthereumInFlightOrder(
+        retval = GatewayInFlightOrder(
             client_order_id=data["client_order_id"],
             exchange_order_id=data["exchange_order_id"],
             trading_pair=data["trading_pair"],
@@ -67,9 +68,30 @@ class EthereumInFlightOrder(InFlightOrderBase):
         return self.last_state in {"CANCELED", "EXPIRED"}
 
     @property
+    def is_cancelling(self) -> bool:
+        return self.last_state == "CANCELING"
+
+    @property
     def gas_price(self) -> Decimal:
         return self._gas_price
 
     @gas_price.setter
-    def gas_price(self, gas_price):
+    def gas_price(self, gas_price: Decimal):
         self._gas_price = gas_price
+
+    @property
+    def cancel_tx_hash(self) -> Optional[str]:
+        return self._cancel_tx_hash
+
+    @cancel_tx_hash.setter
+    def cancel_tx_hash(self, cancel_tx_hash):
+        self._cancel_tx_hash = cancel_tx_hash
+
+    async def get_exchange_order_id(self) -> Optional[str]:
+        """
+        Overridden from parent class because blockchain orders take more time than ones from CEX.
+        """
+        if self.exchange_order_id is None:
+            async with timeout(GET_GATEWAY_EX_ORDER_ID_TIMEOUT):
+                await self.exchange_order_id_update_event.wait()
+        return self.exchange_order_id

@@ -15,7 +15,9 @@ import {
 } from '../../../src/services/error-handler';
 
 import { ConfigManagerCertPassphrase } from '../../../src/services/config-manager-cert-passphrase';
+import { OverrideConfigs } from '../../config.util';
 
+const overrideConfigs = new OverrideConfigs();
 let avalanche: Avalanche;
 let eth: Ethereum;
 let harmony: Harmony;
@@ -23,16 +25,23 @@ let harmony: Harmony;
 beforeAll(async () => {
   patch(ConfigManagerCertPassphrase, 'readPassphrase', () => 'a');
 
+  await overrideConfigs.init();
+  await overrideConfigs.updateConfigs();
   avalanche = Avalanche.getInstance('fuji');
-
   eth = Ethereum.getInstance('kovan');
-
   harmony = Harmony.getInstance('testnet');
 });
 
 beforeEach(() =>
   patch(ConfigManagerCertPassphrase, 'readPassphrase', () => 'a')
 );
+
+afterAll(async () => {
+  await avalanche.close();
+  await eth.close();
+  await harmony.close();
+  await overrideConfigs.resetConfigs();
+});
 
 afterEach(() => unpatch());
 
@@ -67,7 +76,7 @@ describe('addWallet and getWallets', () => {
   it('add an Ethereum wallet', async () => {
     patch(eth, 'getWallet', () => {
       return {
-        address: oneAddress,
+        publicKey: oneAddress,
       };
     });
 
@@ -93,7 +102,7 @@ describe('addWallet and getWallets', () => {
   it('add an Avalanche wallet', async () => {
     patch(avalanche, 'getWallet', () => {
       return {
-        address: oneAddress,
+        publicKey: oneAddress,
       };
     });
 
@@ -119,7 +128,7 @@ describe('addWallet and getWallets', () => {
   it('add an Harmony wallet', async () => {
     patch(harmony, 'getWallet', () => {
       return {
-        address: oneAddress,
+        publicKey: oneAddress,
       };
     });
 
@@ -164,7 +173,7 @@ describe('addWallet and removeWallets', () => {
   it('remove an Ethereum wallet', async () => {
     patch(eth, 'getWallet', () => {
       return {
-        address: oneAddress,
+        publicKey: oneAddress,
       };
     });
 
@@ -192,7 +201,7 @@ describe('addWallet and removeWallets', () => {
   it('remove an Harmony wallet', async () => {
     patch(harmony, 'getWallet', () => {
       return {
-        address: oneAddress,
+        publicKey: oneAddress,
       };
     });
 

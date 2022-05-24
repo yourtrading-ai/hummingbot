@@ -1,18 +1,19 @@
 import asyncio
+import threading
+from decimal import Decimal
+from typing import TYPE_CHECKING, Dict, List, Optional
 
-from hummingbot.client.settings import GLOBAL_CONFIG_PATH
-from hummingbot.user.user_balances import UserBalances
-from hummingbot.core.utils.async_utils import safe_ensure_future
-from hummingbot.client.config.global_config_map import global_config_map
+import pandas as pd
+
 from hummingbot.client.config.config_helpers import save_to_yml
 from hummingbot.client.config.config_validators import validate_decimal, validate_exchange
-from hummingbot.connector.other.celo.celo_cli import CeloCLI
+from hummingbot.client.config.global_config_map import global_config_map
 from hummingbot.client.performance import PerformanceMetrics
+from hummingbot.client.settings import GLOBAL_CONFIG_PATH
+from hummingbot.connector.other.celo.celo_cli import CeloCLI
 from hummingbot.core.rate_oracle.rate_oracle import RateOracle
-import pandas as pd
-from decimal import Decimal
-from typing import TYPE_CHECKING, Dict, Optional, List
-import threading
+from hummingbot.core.utils.async_utils import safe_ensure_future
+from hummingbot.user.user_balances import UserBalances
 
 if TYPE_CHECKING:
     from hummingbot.client.hummingbot_application import HummingbotApplication
@@ -81,6 +82,7 @@ class BalanceCommand:
     async def show_balances(self,  # type: HummingbotApplication
                             ):
         total_col_name = f'Total ({RateOracle.global_token_symbol})'
+        sum_not_for_show_name = "sum_not_for_show"
         self.notify("Updating balances, please wait...")
         network_timeout = float(global_config_map["other_commands_timeout"].value)
         try:
@@ -90,7 +92,7 @@ class BalanceCommand:
         except asyncio.TimeoutError:
             self.notify("\nA network error prevented the balances to update. See logs for more details.")
             raise
-        all_ex_avai_bals = UserBalances.instance().all_avai_balances_all_exchanges()
+        all_ex_avai_bals = UserBalances.instance().all_available_balances_all_exchanges()
         all_ex_limits: Optional[Dict[str, Dict[str, str]]] = global_config_map["balance_asset_limit"].value
 
         if all_ex_limits is None:
@@ -104,10 +106,15 @@ class BalanceCommand:
             if df.empty:
                 self.notify("You have no balance on this exchange.")
             else:
-                lines = ["    " + line for line in df.to_string(index=False).split("\n")]
+                lines = ["    " + line for line in
+                         df.drop(sum_not_for_show_name, axis=1).to_string(index=False).split("\n")]
                 self.notify("\n".join(lines))
-                self.notify(f"\n  Total: {RateOracle.global_token_symbol} {PerformanceMetrics.smart_round(df[total_col_name].sum())}    "
-                            f"Allocated: {allocated_total / df[total_col_name].sum():.2%}")
+                self.notify(f"\n  Total: {RateOracle.global_token_symbol} "
+                            f"{PerformanceMetrics.smart_round(df[total_col_name].sum())}")
+                allocated_percentage = 0
+                if df[sum_not_for_show_name].sum() != Decimal("0"):
+                    allocated_percentage = allocated_total / df[sum_not_for_show_name].sum()
+                self.notify(f"Allocated: {allocated_percentage:.2%}")
                 exchanges_total += df[total_col_name].sum()
 
         self.notify(f"\n\nExchanges Total: {RateOracle.global_token_symbol} {exchanges_total:.0f}    ")
@@ -162,13 +169,9 @@ class BalanceCommand:
     async def ethereum_balances_df(self,  # type: HummingbotApplication
                                    ):
         rows = []
-        if ethereum_required_trading_pairs():
-            bals = await UserBalances.eth_n_erc20_balances()
-            for token, bal in bals.items():
-                rows.append({"Asset": token, "Amount": round(bal, 4)})
-        else:
-            eth_bal = UserBalances.ethereum_balance()
-            rows.append({"Asset": "ETH", "Amount": round(eth_bal, 4)})
+        bals = await UserBalances.eth_n_erc20_balances()
+        for token, bal in bals.items():
+            rows.append({"Asset": token, "Amount": round(bal, 4)})
         df = pd.DataFrame(data=rows, columns=["Asset", "Amount"])
         df.sort_values(by=["Asset"], inplace=True)
         return df
@@ -184,7 +187,7 @@ class BalanceCommand:
         return df
 
     async def solana_balance_df(self,  # type: HummingbotApplication
-                               ):
+                                ):
         rows = []
         bals = await UserBalances.solana_spl_balances()
         for token, bal in bals.items():

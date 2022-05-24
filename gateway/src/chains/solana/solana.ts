@@ -1,3 +1,5 @@
+import { Cache, CacheContainer } from 'node-ts-cache';
+import { MemoryStorage } from 'node-ts-cache-storage-memory';
 import { logger } from '../../services/logger';
 import { SolanaConfig } from './solana.config';
 import { countDecimals, TokenValue, walletPath } from '../../services/base';
@@ -5,6 +7,7 @@ import NodeCache from 'node-cache';
 import bs58 from 'bs58';
 import { BigNumber } from 'ethers';
 import {
+  Account,
   AccountInfo,
   Commitment,
   Connection,
@@ -25,11 +28,16 @@ import { TokenInfo, TokenListProvider } from '@solana/spl-token-registry';
 import { TransactionResponseStatusCode } from './solana.requests';
 import fse from 'fs-extra';
 import { ConfigManagerCertPassphrase } from '../../services/config-manager-cert-passphrase';
+
 const crypto = require('crypto').webcrypto;
+
+const caches = {
+  instances: new CacheContainer(new MemoryStorage()),
+};
 
 export type Solanaish = Solana;
 
-export class Solana {
+export class Solana implements Solanaish {
   public rpcUrl;
   public transactionLamports;
   public cache: NodeCache;
@@ -37,8 +45,9 @@ export class Solana {
   protected tokenList: TokenInfo[] = [];
   private _tokenMap: Record<string, TokenInfo> = {};
   private _tokenAddressMap: Record<string, TokenInfo> = {};
+  private _keypairs: Record<string, Keypair> = {};
 
-  private static _instance: Solana;
+  private static _instances: { [name: string]: Solana };
 
   private _requestCount: number;
   private readonly _connection: Connection;
@@ -50,16 +59,18 @@ export class Solana {
   private readonly _metricsLogInterval: number;
   // there are async values set in the constructor
   private _ready: boolean = false;
-  private _initializing: boolean = false;
-  private _initPromise: Promise<void> = Promise.resolve();
+  private initializing: boolean = false;
 
-  constructor() {
-    this._cluster = SolanaConfig.config.network.slug;
+  constructor(network?: string) {
+    this._cluster = network || SolanaConfig.config.network.slug;
 
     if (SolanaConfig.config.customRpcUrl == undefined) {
       switch (this._cluster) {
         case 'mainnet-beta':
           this.rpcUrl = 'https://api.mainnet-beta.solana.com';
+          break;
+        case 'serum-mainnet':
+          this.rpcUrl = 'https://solana-api.projectserum.com';
           break;
         case 'devnet':
           this.rpcUrl = 'https://api.devnet.solana.com';
@@ -95,25 +106,13 @@ export class Solana {
     return this._lamportPrice;
   }
 
-  public static getInstance(): Solana {
-    if (!Solana._instance) {
-      Solana._instance = new Solana();
-    }
-
-    return Solana._instance;
+  @Cache(caches.instances, { isCachedForever: true })
+  public static async getInstance(network: string): Promise<Solana> {
+    return new Solana(network);
   }
 
   public static getConnectedInstances(): { [name: string]: Solana } {
-    return { solana: Solana._instance };
-  }
-
-  public static reload(): Solana {
-    Solana._instance = new Solana();
-    return Solana._instance;
-  }
-
-  ready(): boolean {
-    return this._ready;
+    return Solana._instances;
   }
 
   public get connection() {
@@ -129,14 +128,16 @@ export class Solana {
   }
 
   async init(): Promise<void> {
-    if (!this.ready() && !this._initializing) {
-      this._initializing = true;
-      this._initPromise = this.loadTokens().then(() => {
-        this._ready = true;
-        this._initializing = false;
-      });
+    if (!this.ready() && !this.initializing) {
+      this.initializing = true;
+      await this.loadTokens();
+      this._ready = true;
+      this.initializing = false;
     }
-    return this._initPromise;
+  }
+
+  ready(): boolean {
+    return this._ready;
   }
 
   async loadTokens(): Promise<void> {
@@ -180,31 +181,75 @@ export class Solana {
   // returns Keypair for a private key, which should be encoded in Base58
   getKeypairFromPrivateKey(privateKey: string): Keypair {
     const decoded = bs58.decode(privateKey);
+
     return Keypair.fromSecretKey(decoded);
   }
 
+  async getAccount(address: string): Promise<Account> {
+    const keypair = await this.getKeypair(address);
+
+    return new Account(keypair.secretKey);
+  }
+
+  /**
+   *
+   * @param walletAddress
+   * @param tokenMintAddress
+   */
+  async findAssociatedTokenAddress(
+    walletAddress: PublicKey,
+    tokenMintAddress: PublicKey
+  ): Promise<PublicKey> {
+    const tokenProgramId = this._tokenProgramAddress;
+    const splAssociatedTokenAccountProgramId = (
+      await this.connection.getParsedTokenAccountsByOwner(walletAddress, {
+        programId: this._tokenProgramAddress,
+      })
+    ).value.map((item) => item.pubkey)[0];
+
+    const programAddress = (
+      await PublicKey.findProgramAddress(
+        [
+          walletAddress.toBuffer(),
+          tokenProgramId.toBuffer(),
+          tokenMintAddress.toBuffer(),
+        ],
+        splAssociatedTokenAccountProgramId
+      )
+    )[0];
+
+    return programAddress;
+  }
+
   async getKeypair(address: string): Promise<Keypair> {
-    const path = `${walletPath}/solana`;
+    if (!this._keypairs[address]) {
+      const path = `${walletPath}/solana`;
 
-    const encryptedPrivateKey: any = JSON.parse(
-      await fse.readFile(`${path}/${address}.json`, 'utf8'),
-      (key, value) => {
-        switch (key) {
-          case 'ciphertext':
-          case 'salt':
-          case 'iv':
-            return bs58.decode(value);
-          default:
-            return value;
+      const encryptedPrivateKey: any = JSON.parse(
+        await fse.readFile(`${path}/${address}.json`, 'utf8'),
+        (key, value) => {
+          switch (key) {
+            case 'ciphertext':
+            case 'salt':
+            case 'iv':
+              return bs58.decode(value);
+            default:
+              return value;
+          }
         }
-      }
-    );
+      );
 
-    const passphrase = ConfigManagerCertPassphrase.readPassphrase();
-    if (!passphrase) {
-      throw new Error('missing passphrase');
+      const passphrase = ConfigManagerCertPassphrase.readPassphrase();
+      if (!passphrase) {
+        throw new Error('missing passphrase');
+      }
+      this._keypairs[address] = await this.decrypt(
+        encryptedPrivateKey,
+        passphrase
+      );
     }
-    return await this.decrypt(encryptedPrivateKey, passphrase);
+
+    return this._keypairs[address];
   }
 
   private static async getKeyMaterial(password: string) {
