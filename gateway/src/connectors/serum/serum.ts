@@ -1440,7 +1440,20 @@ export class Serum {
 
     const owner = await this.getSolanaAccount(target.ownerAddress);
 
-    const order = await this.getOpenOrder({ ...target });
+    let order: Order;
+
+    try {
+      order = await this.getOpenOrder({ ...target });
+    } catch (exception: any) {
+      if (exception instanceof OrderNotFoundError) {
+        order = target as Order;
+        order.status = OrderStatus.CANCELED;
+
+        return order;
+      }
+
+      throw exception;
+    }
 
     try {
       order.signature = (

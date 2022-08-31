@@ -530,7 +530,7 @@ class GatewaySOLCLOB(ConnectorBase):
         """
         return await self.get_quote_price(trading_pair, is_buy, amount, ignore_shim=ignore_shim)
 
-    def buy(self, trading_pair: str, amount: Decimal, order_type: OrderType, price: Decimal) -> str:
+    def buy(self, trading_pair: str, amount: Decimal, order_type: OrderType, price: Decimal, **kwargs) -> str:
         """
         Buys an amount of base token for a given price (or cheaper).
         :param trading_pair: The market trading pair
@@ -541,7 +541,7 @@ class GatewaySOLCLOB(ConnectorBase):
         """
         return self.place_order(True, trading_pair, amount, price)
 
-    def sell(self, trading_pair: str, amount: Decimal, order_type: OrderType, price: Decimal) -> str:
+    def sell(self, trading_pair: str, amount: Decimal, order_type: OrderType, price: Decimal, **kwargs) -> str:
         """
         Sells an amount of base token for a given price (or at a higher price).
         :param trading_pair: The market trading pair
@@ -1087,10 +1087,12 @@ class GatewaySOLCLOB(ConnectorBase):
 
             signature: Optional[str] = resp.get("signature")
 
-            if signature is not None:
-                tracked_order.cancel_tx_hash = signature
-            else:
-                raise EnvironmentError(f"Missing txHash from the transaction response: {resp}.")
+            tracked_order.cancel_tx_hash = signature
+
+            # if signature is not None:
+            #     tracked_order.cancel_tx_hash = signature
+            # else:
+            #     raise EnvironmentError(f"Missing txHash from the transaction response: {resp}.")
 
             order_update: OrderUpdate = OrderUpdate(
                 client_order_id=order_id,
