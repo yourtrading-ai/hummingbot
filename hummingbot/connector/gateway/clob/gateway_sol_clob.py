@@ -71,15 +71,15 @@ class GatewaySOLCLOB(ConnectorBase):
     _native_currency: Optional[str]
 
     def __init__(
-            self,
-            client_config_map: "ClientConfigAdapter",
-            connector_name: str,
-            chain: str,
-            network: str,
-            wallet_address: str,
-            trading_pairs: List[str] = (),
-            additional_spenders: List[str] = [],  # not implemented
-            trading_required: bool = True
+        self,
+        client_config_map: "ClientConfigAdapter",
+        connector_name: str,
+        chain: str,
+        network: str,
+        wallet_address: str,
+        trading_pairs: List[str] = (),
+        additional_spenders: List[str] = [],  # not implemented
+        trading_required: bool = True
     ):
         """
         :param connector_name: name of connector on gateway :param chain: refers to a blockchain, e.g. ethereum or
@@ -438,11 +438,11 @@ class GatewaySOLCLOB(ConnectorBase):
 
     @async_ttl_cache(ttl=5, maxsize=10)
     async def get_quote_price(
-            self,
-            trading_pair: str,
-            is_buy: bool,
-            amount: Decimal,
-            ignore_shim: bool = False
+        self,
+        trading_pair: str,
+        is_buy: bool,
+        amount: Decimal,
+        ignore_shim: bool = False
     ) -> Optional[Decimal]:
         """
         Retrieves a quote price.
@@ -518,11 +518,11 @@ class GatewaySOLCLOB(ConnectorBase):
             )
 
     async def get_order_price(
-            self,
-            trading_pair: str,
-            is_buy: bool,
-            amount: Decimal,
-            ignore_shim: bool = False
+        self,
+        trading_pair: str,
+        is_buy: bool,
+        amount: Decimal,
+        ignore_shim: bool = False
     ) -> Decimal:
 
         """
@@ -569,13 +569,13 @@ class GatewaySOLCLOB(ConnectorBase):
 
     # noinspection PyUnusedLocal
     async def _create_order(
-            self,
-            trade_type: TradeType,
-            order_id: str,
-            trading_pair: str,
-            amount: Decimal,
-            price: Decimal,
-            **request_args
+        self,
+        trade_type: TradeType,
+        order_id: str,
+        trading_pair: str,
+        amount: Decimal,
+        price: Decimal,
+        **request_args
     ):
         """
         Calls buy or sell API end point to place an order, starts tracking the order and triggers relevant order events.
@@ -633,7 +633,8 @@ class GatewaySOLCLOB(ConnectorBase):
 
                 order_update: OrderUpdate = OrderUpdate(
                     client_order_id=order_id,
-                    exchange_order_id=signature,  # The GatewayEVMAMM implementation uses the creation transaction hash here.
+                    exchange_order_id=signature,
+                    # The GatewayEVMAMM implementation uses the creation transaction hash here.
                     trading_pair=trading_pair,
                     update_timestamp=self.current_timestamp,
                     new_state=OrderState.OPEN,  # Assume that the transaction has been successfully mined.
@@ -666,15 +667,15 @@ class GatewaySOLCLOB(ConnectorBase):
             self._order_tracker.process_order_update(order_update)
 
     def start_tracking_order(
-            self,
-            order_id: str,
-            exchange_order_id: Optional[str] = None,
-            trading_pair: str = "",
-            trade_type: TradeType = TradeType.BUY,
-            price: Decimal = constant.DECIMAL_ZERO,
-            amount: Decimal = constant.DECIMAL_ZERO,
-            gas_price: Decimal = constant.DECIMAL_ZERO,
-            is_approval: bool = False
+        self,
+        order_id: str,
+        exchange_order_id: Optional[str] = None,
+        trading_pair: str = "",
+        trade_type: TradeType = TradeType.BUY,
+        price: Decimal = constant.DECIMAL_ZERO,
+        amount: Decimal = constant.DECIMAL_ZERO,
+        gas_price: Decimal = constant.DECIMAL_ZERO,
+        is_approval: bool = False
     ):
         """
         Starts tracking an order by simply adding it into _in_flight_orders dictionary in ClientOrderTracker.
@@ -762,45 +763,35 @@ class GatewaySOLCLOB(ConnectorBase):
                 self.stop_tracking_order(tracked_approval.client_order_id)
 
     async def update_canceling_transactions(self, canceled_tracked_orders: List[CLOBInFlightOrder]):
-        """
-        Update tracked orders that have a cancel_tx_hash.
-        :param canceled_tracked_orders: Canceled tracked_orders (cancel_tx_has is not None).
-        """
         if len(canceled_tracked_orders) < 1:
             return
 
-        self.logger().debug(
-            "Polling for order status updates of %d canceled orders.",
-            len(canceled_tracked_orders)
-        )
-        update_results: List[Union[Dict[str, Any], Exception]] = await safe_gather(*[
-            self._get_gateway_instance().get_transaction_status(
-                self.chain,
-                self.network,
-                tx_hash
-            )
-            for tx_hash in [t.cancel_tx_hash for t in canceled_tracked_orders]
-        ], return_exceptions=True)
-        for tracked_order, update_result in zip(canceled_tracked_orders, update_results):
-            if isinstance(update_result, Exception):
-                raise update_result
-            if "txHash" not in update_result:
-                self.logger().error(f"No txHash field for transaction status of {tracked_order.client_order_id}: "
-                                    f"{update_result}.")
-                continue
-            if update_result["txStatus"] == 1:
-                if update_result["txReceipt"]["status"] == 1:
-                    if tracked_order.current_state == OrderState.PENDING_CANCEL:
-                        if not tracked_order.is_approval_request:
-                            order_update: OrderUpdate = OrderUpdate(
-                                trading_pair=tracked_order.trading_pair,
-                                client_order_id=tracked_order.client_order_id,
-                                update_timestamp=self.current_timestamp,
-                                new_state=OrderState.CANCELED
-                            )
-                            self._order_tracker.process_order_update(order_update)
+        tracked_canceled_approval_requests = [order for order in canceled_tracked_orders if order.is_approval_request]
+        tracked_canceled_orders = [order for order in canceled_tracked_orders if order.is_approval_request]
 
-                        elif tracked_order.is_approval_request:
+        if len(tracked_canceled_approval_requests) > 0:
+            self.logger().debug(
+                f'Polling status updates of {len(tracked_canceled_approval_requests)} approval requests.')
+
+            transaction_statuses: List[Union[Dict[str, Any], Exception]] = await safe_gather(*[
+                self._get_gateway_instance().get_transaction_status(
+                    self.chain,
+                    self.network,
+                    tx_hash
+                )
+                for tx_hash in [t.cancel_tx_hash for t in canceled_tracked_orders]
+            ], return_exceptions=True)
+
+            for tracked_order, update_result in zip(tracked_canceled_approval_requests, transaction_statuses):
+                if isinstance(update_result, Exception):
+                    raise update_result
+                if "txHash" not in update_result:
+                    self.logger().error(f"No txHash field for transaction status of {tracked_order.client_order_id}: "
+                                        f"{update_result}.")
+                    continue
+                if update_result["txStatus"] == 1:
+                    if update_result["txReceipt"]["status"] == 1:
+                        if tracked_order.current_state == OrderState.PENDING_CANCEL:
                             OrderUpdate(
                                 trading_pair=tracked_order.trading_pair,
                                 client_order_id=tracked_order.client_order_id,
@@ -820,7 +811,38 @@ class GatewaySOLCLOB(ConnectorBase):
                             )
                             self.logger().info(f"Token approval for {tracked_order.client_order_id} on "
                                                f"{self.chain}/{self.network}/{self.connector} has been canceled.")
-                    self.stop_tracking_order(tracked_order.client_order_id)
+                        self.stop_tracking_order(tracked_order.client_order_id)
+
+        if len(tracked_canceled_orders) > 0:
+            self.logger().debug(f'Checking the status of {len(tracked_canceled_orders)} orders.')
+            open_orders = await self._get_gateway_instance().clob_get_open_orders(
+                chain=self.chain,
+                network=self.network,
+                connector=self.connector,
+                owner_address=self.address,
+                orders=[{
+                    "id": order.client_order_id,
+                    "marketName": convert_trading_pair(order.trading_pair),
+                    "ownerAddress": self.address,
+                } for order in canceled_tracked_orders]
+            )
+
+            open_orders_ids = [order["id"] for order in open_orders.values()]
+
+            canceled_orders = [order for order in tracked_canceled_orders if
+                               order.client_order_id not in open_orders_ids]
+
+            for order in canceled_orders:
+                if order.current_state == OrderState.PENDING_CANCEL:
+                    order_update: OrderUpdate = OrderUpdate(
+                        trading_pair=order.trading_pair,
+                        client_order_id=order.client_order_id,
+                        update_timestamp=self.current_timestamp,
+                        new_state=OrderState.CANCELED
+                    )
+                    self._order_tracker.process_order_update(order_update)
+
+                self.stop_tracking_order(order.client_order_id)
 
     async def update_order_status(self, tracked_orders: List[CLOBInFlightOrder]):
         """
@@ -930,7 +952,8 @@ class GatewaySOLCLOB(ConnectorBase):
             self._auto_approve_task = safe_ensure_future(self.auto_approve())
         self._get_chain_info_task = safe_ensure_future(self.get_chain_info())
         self._get_markets_task = safe_ensure_future(self.get_markets())
-        self._set_order_price_and_order_size_quantum_task = safe_ensure_future(self.set_order_price_and_order_size_quantum())
+        self._set_order_price_and_order_size_quantum_task = safe_ensure_future(
+            self.set_order_price_and_order_size_quantum())
         self._auto_create_token_accounts_task = safe_ensure_future(self.auto_create_token_accounts())
 
     async def stop_network(self):
