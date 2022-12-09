@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import sys
 from os.path import join, realpath
 from typing import Any, Callable, List, Optional
 
@@ -19,7 +20,7 @@ from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.logger import HummingbotLogger
 from hummingbot.notifier.notifier_base import NotifierBase
 
-import sys; sys.path.insert(0, realpath(join(__file__, "../../../")))
+sys.path.insert(0, realpath(join(__file__, "../../../")))
 
 DISABLED_COMMANDS = {
     "connect",             # disabled because telegram can't display secondary prompt
@@ -114,7 +115,7 @@ class TelegramNotifier(NotifierBase):
     async def handler_loop(self, bot: Bot, update: Update) -> None:
         async_scheduler: AsyncCallScheduler = AsyncCallScheduler.shared_instance()
         try:
-            input_text = update.message.text.strip()
+            input_text = update.message.text.strip().lstrip("/")
             output = f"\n[Telegram Input] {input_text}"
 
             self._hb.app.log(output)
