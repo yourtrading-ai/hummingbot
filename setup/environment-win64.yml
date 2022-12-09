@@ -57,7 +57,9 @@ dependencies:
     - flake8==3.7.9
     - hexbytes==0.2.0
     - importlib-metadata==0.23
+    - jsonpickle==2.2.0
     - mypy-extensions==0.4.3
+    - nest-asyncio==1.5.5
     - pre-commit==2.18.1
     - psutil==5.7.2
     - ptpython==3.0.20
@@ -76,4 +78,4 @@ dependencies:
     - websockets==9.1
     - yarl==1.4.2
     - git+https://github.com/CoinAlpha/python-signalr-client.git
-prefix: C:\Users\marti\Anaconda3\envs\hummingbot
+prefix: C:\Users\hummingbot\Anaconda3\envs\hummingbot
