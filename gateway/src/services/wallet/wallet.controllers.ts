@@ -56,7 +56,7 @@ export async function addWallet(
   } else if (req.chain === 'cronos') {
     connection = Cronos.getInstance(req.network);
   } else if (req.chain === 'solana') {
-    connection = Solana.getInstance(req.network);
+    connection = await Solana.getInstance(req.network);
   } else if (req.chain === 'polygon') {
     connection = Polygon.getInstance(req.network);
   } else if (req.chain === 'near') {

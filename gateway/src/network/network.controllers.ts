@@ -44,7 +44,7 @@ export async function getStatus(
     } else if (req.chain === 'polygon') {
       connections.push(Polygon.getInstance(req.network as string));
     } else if (req.chain === 'solana') {
-      connections.push(Solana.getInstance(req.network as string));
+      connections.push(await Solana.getInstance(req.network as string));
     } else if (req.chain === 'near') {
       connections.push(Near.getInstance(req.network as string));
     } else if (req.chain === 'cronos') {
@@ -140,7 +140,7 @@ export async function getTokens(req: TokensRequest): Promise<TokensResponse> {
     } else if (req.chain === 'polygon') {
       connection = Polygon.getInstance(req.network);
     } else if (req.chain === 'solana') {
-      connection = Solana.getInstance(req.network);
+      connection = await Solana.getInstance(req.network);
     } else if (req.chain === 'near') {
       connection = Near.getInstance(req.network);
     } else if (req.chain === 'cronos') {
