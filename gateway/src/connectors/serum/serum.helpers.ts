@@ -35,7 +35,7 @@ export const sleep = (milliseconds: number) =>
  * @returns {B[]}
  */
 export const promiseAllInBatches = async <I, O>(
-  task: (item: I) => O,
+  task: (item: I) => Promise<O>,
   items: any[],
   batchSize: number = constants.parallel.all.batchSize,
   delayBetweenBatches: number = constants.parallel.all.delayBetweenBatches
@@ -90,6 +90,7 @@ export const runWithRetryAndTimeout = async <R>(
   timeout: number = constants.timeout.all,
   timeoutMessage: string = 'Timeout exceeded.'
 ): Promise<R> => {
+  const errors = [];
   let retryCount = 0;
   let timer: any;
 
@@ -106,17 +107,45 @@ export const runWithRetryAndTimeout = async <R>(
       }
 
       return result as R;
-    } catch (error) {
+    } catch (error: any) {
+      errors.push(error);
+
       retryCount++;
+
+      console.debug(
+        `${targetObject?.constructor.name || targetObject}:${
+          targetFunction.name
+        } => retry ${retryCount} of ${maxNumberOfRetries}`
+      );
+
       if (retryCount < maxNumberOfRetries) {
         if (delayBetweenRetries > 0) {
           await sleep(delayBetweenRetries);
         }
       } else {
-        throw error;
+        const allErrors = Error(
+          `Failed to execute "${
+            targetFunction.name
+          }" with ${maxNumberOfRetries} retries. All error messages were:\n${errors
+            .map((error: any) => error.message)
+            .join(';\n')}\n`
+        );
+
+        allErrors.stack = error.stack;
+
+        throw allErrors;
       }
     }
   } while (retryCount < maxNumberOfRetries);
 
   throw Error('Unknown error.');
 };
+
+export function* splitInChunks<T>(
+  target: T[],
+  quantity: number
+): Generator<T[], void> {
+  for (let i = 0; i < target.length; i += quantity) {
+    yield target.slice(i, i + quantity);
+  }
+}
