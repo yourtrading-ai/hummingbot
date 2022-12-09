@@ -295,7 +295,7 @@ export async function getOrders(
     try {
       response.body = convertToJsonIfNeeded(
         convert<Order, SerumGetOrdersResponse>(
-          await serum.getOrder(request.order),
+          await serum.getOrder(request.order, request.limit),
           Types.GetOrdersResponse
         )
       );
@@ -316,7 +316,7 @@ export async function getOrders(
     validateGetOrdersRequest(request.orders);
 
     try {
-      const orders = await serum.getOrders(request.orders);
+      const orders = await serum.getOrders(request.orders, request.limit);
 
       if (!orders.size) throw new OrderNotFoundError('No orders found.');
 
@@ -343,7 +343,12 @@ export async function getOrders(
 
   response.body = convertToJsonIfNeeded(
     convert<IMap<string, IMap<string, Order>>, SerumGetOrdersResponse>(
-      await serum.getAllOrders(request.ownerAddress),
+      await serum.getAllOrders(
+        request.ownerAddress,
+        request.marketName,
+        request.marketNames,
+        request.limit
+      ),
       Types.GetFilledOrdersResponse
     )
   );
@@ -372,7 +377,7 @@ export async function createOrders(
 
     response.body = convertToJsonIfNeeded(
       convert<Order, SerumCreateOrdersResponse>(
-        await serum.createOrder(request.order),
+        await serum.createOrder(request.order, request.replaceIfExists),
         Types.CreateOrdersResponse
       )
     );
@@ -387,7 +392,7 @@ export async function createOrders(
 
     response.body = convertToJsonIfNeeded(
       convert<IMap<string, Order>, SerumCreateOrdersResponse>(
-        await serum.createOrders(request.orders),
+        await serum.createOrders(request.orders, request.replaceIfExists),
         Types.CreateOrdersResponse
       )
     );
@@ -451,7 +456,11 @@ export async function cancelOrders(
 
   response.body = convertToJsonIfNeeded(
     convert<IMap<string, Order>, SerumCancelOrdersResponse>(
-      await serum.cancelAllOrders(request.ownerAddress),
+      await serum.cancelAllOrders(
+        request.ownerAddress,
+        request.marketName,
+        request.marketNames
+      ),
       Types.CancelOrdersResponse
     )
   );
@@ -529,7 +538,11 @@ export async function getOpenOrders(
 
   response.body = convertToJsonIfNeeded(
     convert<IMap<string, IMap<string, Order>>, SerumGetOpenOrdersResponse>(
-      await serum.getAllOpenOrders(request.ownerAddress),
+      await serum.getAllOpenOrders(
+        request.ownerAddress,
+        request.marketName,
+        request.marketNames
+      ),
       Types.GetOpenOrdersResponse
     )
   );
@@ -559,7 +572,7 @@ export async function getFilledOrders(
     try {
       response.body = convertToJsonIfNeeded(
         convert<Order, SerumGetFilledOrdersResponse>(
-          await serum.getFilledOrder(request.order),
+          await serum.getFilledOrder(request.order, request.limit),
           Types.GetFilledOrdersResponse
         )
       );
@@ -582,7 +595,7 @@ export async function getFilledOrders(
     try {
       response.body = convertToJsonIfNeeded(
         convert<IMap<string, Order>, SerumGetFilledOrdersResponse>(
-          await serum.getFilledOrders(request.orders),
+          await serum.getFilledOrders(request.orders, request.limit),
           Types.GetFilledOrdersResponse
         )
       );
@@ -603,7 +616,11 @@ export async function getFilledOrders(
 
   response.body = convertToJsonIfNeeded(
     convert<IMap<string, IMap<string, Order>>, SerumGetFilledOrdersResponse>(
-      await serum.getAllFilledOrders(),
+      await serum.getAllFilledOrders(
+        request.marketName,
+        request.marketNames,
+        request.limit
+      ),
       Types.GetFilledOrdersResponse
     )
   );
