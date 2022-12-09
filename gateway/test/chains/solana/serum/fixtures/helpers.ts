@@ -23,46 +23,59 @@ export interface CreateOrderData {
   response: CreateOrderResponse;
 }
 
-const marketNames = ['SOL/USDT', 'SOL/USDC'];
+const marketNames = ['SOL/USDT', 'SOL/USDC', 'SRM/SOL', 'DUMMY/USDC'];
 
-const getRandomChoice = (array: any[]) =>
+export const getRandomChoice = (array: any[]) =>
   array[Math.floor(Math.random() * array.length)];
 
-export const getNewCandidateOrderTemplate = (configuration?: {
+export const getRandomNumberInInterval = (min: number, max: number): number =>
+  Math.random() * (max - min) + min;
+
+export interface OrderTemplate {
   id?: string;
   marketName?: string;
   ownerAddress?: string;
   payerAddress?: string;
   side?: OrderSide;
+  price?: number;
+  amount?: number;
   type?: OrderType;
-}): CreateOrdersRequest => {
+  replaceIfExists?: boolean;
+}
+
+export const getNewCandidateOrderTemplate = (
+  configuration?: OrderTemplate
+): CreateOrdersRequest => {
+  const ownerPublicKey =
+    process.env['TEST_SOLANA_WALLET_PUBLIC_KEY'] ||
+    config.solana.wallet.owner.publicKey;
+
   if (!configuration) configuration = {};
   if (!configuration.id) configuration.id = Date.now().toString();
   if (!configuration.marketName)
     configuration.marketName = getRandomChoice(marketNames);
-  if (!configuration.ownerAddress)
-    configuration.ownerAddress = config.solana.wallet.owner.publicKey;
-  if (!configuration.payerAddress)
-    if (configuration.side == OrderSide.SELL) {
-      configuration.payerAddress = config.solana.wallet.owner.publicKey;
-    } else {
-      if (configuration.marketName == 'SOL/USDT') {
-        configuration.payerAddress =
-          config.solana.wallet.payer['SOL/USDT'].publicKey;
-      } else if (configuration.marketName == 'SOL/USDC') {
-        configuration.payerAddress =
-          config.solana.wallet.payer['SOL/USDC'].publicKey;
-      } else {
-        throw new Error('Unrecognized market name.');
-      }
-    }
+  if (!configuration.ownerAddress) configuration.ownerAddress = ownerPublicKey;
   if (!configuration.side)
-    configuration.side = getRandomChoice(Object.values(OrderSide));
+    if (configuration.id) {
+      const mod = parseInt(configuration.id) % 2;
+      configuration.side = mod == 0 ? OrderSide.SELL : OrderSide.BUY;
+    } else {
+      configuration.side = getRandomChoice(Object.values(OrderSide));
+    }
   if (!configuration.type)
     configuration.type = getRandomChoice([OrderType.LIMIT]);
 
-  const price = configuration.side == OrderSide.BUY ? 0.1 : 9999.99;
-  const amount = configuration.side == OrderSide.BUY ? 0.1 : 0.1;
+  if (!configuration.replaceIfExists)
+    configuration.replaceIfExists = getRandomChoice([false, true]);
+
+  if (!configuration.price)
+    configuration.price =
+      configuration.side == OrderSide.BUY
+        ? getRandomNumberInInterval(0.1, 0.2)
+        : getRandomNumberInInterval(999.0, 1000.0);
+
+  if (!configuration.amount)
+    configuration.amount = configuration.side == OrderSide.BUY ? 0.1 : 0.1;
 
   return {
     id: configuration.id,
@@ -70,9 +83,10 @@ export const getNewCandidateOrderTemplate = (configuration?: {
     ownerAddress: configuration.ownerAddress,
     payerAddress: configuration.payerAddress,
     side: getNotNullOrThrowError(configuration.side),
-    price: price,
-    amount: amount,
+    price: configuration.price,
+    amount: configuration.amount,
     type: configuration.type,
+    replaceIfExists: configuration.replaceIfExists,
   };
 };
 
@@ -80,30 +94,36 @@ export const getNewCandidateOrderTemplate = (configuration?: {
  * Return max of 12 orders for now
  *
  * @param quantity
+ * @param initialId
+ * @param configuration
  */
 export const getNewCandidateOrdersTemplates = (
   quantity: number,
-  initialId: number = 1
+  initialId: number = 1,
+  configuration?: OrderTemplate
 ): CreateOrdersRequest[] => {
-  let count = initialId;
+  let count = 0;
   const result: CreateOrdersRequest[] = [];
 
-  while (count <= quantity) {
+  while (count < quantity) {
     for (const marketName of marketNames) {
       for (const side of Object.values(OrderSide)) {
         for (const type of [OrderType.LIMIT]) {
           result.push(
             getNewCandidateOrderTemplate({
-              id: count.toString(),
-              marketName,
-              side,
-              type,
+              ...{
+                id: (initialId + count).toString(),
+                marketName,
+                side,
+                type,
+              },
+              ...configuration,
             })
           );
 
           count = count + 1;
 
-          if (count > quantity) return result;
+          if (count >= quantity) return result;
         }
       }
     }
@@ -197,4 +217,8 @@ export const convertToSerumOpenOrders = (
   }
 
   return result;
+};
+
+export const dump = (message: string, target: any) => {
+  console.log(`${message}:\n${JSON.stringify(target, null, 2)}`);
 };
