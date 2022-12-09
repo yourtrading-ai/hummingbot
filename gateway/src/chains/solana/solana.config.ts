@@ -5,6 +5,10 @@ export interface NetworkConfig {
   nodeUrl: string;
 }
 
+export interface TokenConfig {
+  url: string;
+}
+
 export interface Config {
   network: NetworkConfig;
   nativeCurrencySymbol: string;
@@ -13,6 +17,7 @@ export interface Config {
   lamportsToSol: number;
   timeToLive: number;
   customNodeUrl: string | undefined;
+  tokens: TokenConfig;
 }
 
 export function getSolanaConfig(
@@ -35,5 +40,8 @@ export function getSolanaConfig(
     lamportsToSol: configManager.get(chainName + '.lamportsToSol'),
     timeToLive: configManager.get(chainName + '.timeToLive'),
     customNodeUrl: configManager.get(chainName + '.customNodeUrl'),
+    tokens: {
+      url: configManager.get(chainName + '.tokens.url'),
+    },
   };
 }

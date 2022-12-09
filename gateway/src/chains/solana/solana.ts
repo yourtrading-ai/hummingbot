@@ -2,7 +2,7 @@ import {
   Account as TokenAccount,
   getOrCreateAssociatedTokenAccount,
 } from '@solana/spl-token';
-import { TokenInfo, TokenListProvider } from '@solana/spl-token-registry';
+import { TokenInfo, TokenListContainer } from '@solana/spl-token-registry';
 import {
   Account,
   AccountInfo,
@@ -23,12 +23,16 @@ import fse from 'fs-extra';
 import NodeCache from 'node-cache';
 import { Cache, CacheContainer } from 'node-ts-cache';
 import { MemoryStorage } from 'node-ts-cache-storage-memory';
-import { runWithRetryAndTimeout } from '../../connectors/serum/serum.helpers';
+import {
+  getNotNullOrThrowError,
+  runWithRetryAndTimeout,
+} from '../../connectors/serum/serum.helpers';
 import { countDecimals, TokenValue, walletPath } from '../../services/base';
 import { ConfigManagerCertPassphrase } from '../../services/config-manager-cert-passphrase';
 import { logger } from '../../services/logger';
-import { getSolanaConfig } from './solana.config';
+import { Config, getSolanaConfig } from './solana.config';
 import { TransactionResponseStatusCode } from './solana.requests';
+import axios from 'axios';
 
 const crypto = require('crypto').webcrypto;
 
@@ -42,6 +46,7 @@ export class Solana implements Solanaish {
   public cache: NodeCache;
 
   protected tokenList: TokenInfo[] = [];
+  private _config: Config;
   private _tokenMap: Record<string, TokenInfo> = {};
   private _tokenAddressMap: Record<string, TokenInfo> = {};
   private _keypairs: Record<string, Keypair> = {};
@@ -63,18 +68,18 @@ export class Solana implements Solanaish {
   constructor(network: string) {
     this._network = network;
 
-    const config = getSolanaConfig('solana', network);
+    this._config = getSolanaConfig('solana', network);
 
-    this.rpcUrl = config.network.nodeUrl;
+    this.rpcUrl = this._config.network.nodeUrl;
 
     this._connection = new Connection(this.rpcUrl, 'processed' as Commitment);
     this.cache = new NodeCache({ stdTTL: 3600 }); // set default cache ttl to 1hr
 
     this._nativeTokenSymbol = 'SOL';
-    this._tokenProgramAddress = new PublicKey(config.tokenProgram);
+    this._tokenProgramAddress = new PublicKey(this._config.tokenProgram);
 
-    this.transactionLamports = config.transactionLamports;
-    this._lamportPrice = config.lamportsToSol;
+    this.transactionLamports = this._config.transactionLamports;
+    this._lamportPrice = this._config.lamportsToSol;
     this._lamportDecimals = countDecimals(this._lamportPrice);
 
     this._requestCount = 0;
@@ -139,14 +144,14 @@ export class Solana implements Solanaish {
 
   // returns a Tokens for a given list source and list type
   async getTokenList(): Promise<TokenInfo[]> {
-    const tokenListProvider = new TokenListProvider();
-    const tokens = await runWithRetryAndTimeout(
-      tokenListProvider,
-      tokenListProvider.resolve,
-      []
-    );
+    const tokens: TokenInfo[] =
+      await new CustomStaticTokenListResolutionStrategy(
+        this._config.tokens.url
+      ).resolve();
 
-    return tokens.filterByClusterSlug(this._network).getList();
+    const tokenListContainer = new TokenListContainer(tokens);
+
+    return tokenListContainer.filterByClusterSlug(this._network).getList();
   }
 
   // returns the price of 1 lamport in SOL
@@ -342,11 +347,13 @@ export class Solana implements Solanaish {
   }
 
   async getBalances(wallet: Keypair): Promise<Record<string, TokenValue>> {
-    const balances: Record<string, TokenValue> = {};
+    let balances: Record<string, TokenValue> = {};
 
-    balances['SOL'] = await runWithRetryAndTimeout(this, this.getSolBalance, [
-      wallet,
-    ]);
+    balances['UNWRAPPED_SOL'] = await runWithRetryAndTimeout(
+      this,
+      this.getSolBalance,
+      [wallet]
+    );
 
     const allSplTokens = await runWithRetryAndTimeout(
       this.connection,
@@ -361,12 +368,40 @@ export class Solana implements Solanaish {
       }) => {
         const tokenInfo = tokenAccount.account.data.parsed['info'];
         const symbol = this.getTokenForMintAddress(tokenInfo['mint'])?.symbol;
-        if (symbol != null && symbol.toUpperCase() !== 'SOL')
-          balances[symbol.toUpperCase()] = this.tokenResponseToTokenValue(
+        if (symbol != null)
+          balances[symbol] = this.tokenResponseToTokenValue(
             tokenInfo['tokenAmount']
           );
       }
     );
+
+    let allSolBalance = BigNumber.from(0);
+    let allSolDecimals;
+
+    if (balances['UNWRAPPED_SOL'] && balances['UNWRAPPED_SOL'].value) {
+      allSolBalance = allSolBalance.add(balances['UNWRAPPED_SOL'].value);
+      allSolDecimals = balances['UNWRAPPED_SOL'].decimals;
+    }
+
+    if (balances['SOL'] && balances['SOL'].value) {
+      allSolBalance = allSolBalance.add(balances['SOL'].value);
+      allSolDecimals = balances['SOL'].decimals;
+    }
+
+    balances['ALL_SOL'] = {
+      value: allSolBalance,
+      decimals: getNotNullOrThrowError<number>(allSolDecimals),
+    };
+
+    balances = Object.keys(balances)
+      .sort((key1: string, key2: string) =>
+        key1.toUpperCase().localeCompare(key2.toUpperCase())
+      )
+      .reduce((target: Record<string, TokenValue>, key) => {
+        target[key] = balances[key];
+
+        return target;
+      }, {});
 
     return balances;
   }
@@ -574,6 +609,21 @@ export class Solana implements Solanaish {
     if (this._network in Solana._instances) {
       delete Solana._instances[this._network];
     }
+  }
+}
+
+class CustomStaticTokenListResolutionStrategy {
+  resolve: () => Promise<any>;
+
+  constructor(url: string) {
+    this.resolve = async () => {
+      if (!url.startsWith('https')) {
+        return require(url)['tokens'];
+      } else {
+        return (await runWithRetryAndTimeout<any>(axios, axios.get, [url]))
+          .data['tokens'];
+      }
+    };
   }
 }
 

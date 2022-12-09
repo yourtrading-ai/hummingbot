@@ -86,7 +86,7 @@ export async function poll(
     txHash: req.txHash,
     txStatus: txStatus,
     txBlock: txData.slot,
-    txData: getNotNullOrThrowError<CustomTransactionResponse>(txData),
+    txData: txData as unknown as CustomTransactionResponse | null,
     txReceipt: null, // TODO check if we get a receipt here
   };
 }
