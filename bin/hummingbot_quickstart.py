@@ -10,8 +10,9 @@ import subprocess
 from pathlib import Path
 from typing import Coroutine, List
 
-import path_util  # noqa: F401
+import nest_asyncio
 
+import path_util  # noqa: F401
 from bin.docker_connection import fork_and_start
 from bin.hummingbot import UIStartListener, detect_available_port
 from hummingbot import init_logging
@@ -33,6 +34,8 @@ from hummingbot.core.event.events import HummingbotUIEvent
 from hummingbot.core.gateway import start_existing_gateway_container
 from hummingbot.core.management.console import start_management_console
 from hummingbot.core.utils.async_utils import safe_gather
+
+nest_asyncio.apply()
 
 
 class CmdlineParser(argparse.ArgumentParser):
@@ -92,6 +95,8 @@ async def quick_start(args: argparse.Namespace, secrets_manager: BaseSecretsMana
     AllConnectorSettings.initialize_paper_trade_settings(client_config_map.paper_trade.paper_trade_exchanges)
 
     hb = HummingbotApplication.main_application(client_config_map=client_config_map)
+    hb._initialize_notifiers()
+
     # Todo: validate strategy and config_file_name before assinging
 
     strategy_config = None
