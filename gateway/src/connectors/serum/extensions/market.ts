@@ -51,8 +51,7 @@ import {
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { Buffer } from 'buffer';
-import { promiseAllInBatches } from '../serum.helpers';
-import { OriginalSerumMarket } from '../serum.types';
+import { IMap, OriginalSerumMarket } from '../serum.types';
 
 export class Market {
   private _decoded: any;
@@ -391,13 +390,43 @@ export class Market {
 
   async placeOrders(
     connection: Connection,
-    orders: OrderParams<Account>[]
-  ): Promise<TransactionSignature[]> {
-    const transactionSignatures = new Array<TransactionSignature>();
-    const ownersMap = new Map<
-      Account,
-      { transaction: Transaction; signers: Array<Account> }
-    >();
+    owner: Account,
+    orders: OrderParams<Account>[],
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
+  ): Promise<TransactionSignature> {
+    const transaction = new Transaction();
+    const signers: Array<Account> = [];
+
+    if (consumeEventsLimit) {
+      const eventQueue = await this.loadEventQueue(connection);
+
+      if (eventQueue.length > 0) {
+        const map: IMap<string, PublicKey> = IMap<
+          string,
+          PublicKey
+        >().asMutable();
+
+        for (const event of eventQueue) {
+          map.set(event.openOrders.toString(), event.openOrders);
+        }
+
+        const orderedAccounts = map
+          .sortBy((value) => value.toBuffer().swap64())
+          .toList()
+          .toJSON();
+
+        transaction.add(
+          this.makeConsumeEventsInstruction(
+            orderedAccounts.slice(0, consumeEventsLimit),
+            consumeEventsLimit
+          )
+        );
+      }
+    }
+
+    if (matchOrdersLimit)
+      transaction.add(this.makeMatchOrdersTransaction(matchOrdersLimit));
 
     for (const {
       owner,
@@ -413,15 +442,6 @@ export class Market {
       maxTs,
       replaceIfExists = false,
     } of orders) {
-      let item = ownersMap.get(owner);
-      if (!item) {
-        item = { transaction: new Transaction(), signers: [] };
-        ownersMap.set(owner, item);
-      }
-
-      const transaction: Transaction = item.transaction;
-      const signers: Array<Account> = item.signers;
-
       const partial = await this.makePlaceOrderTransactionForBatch(
         transaction,
         connection,
@@ -444,20 +464,13 @@ export class Market {
       signers.push(...partial.signers);
     }
 
-    const sendTransaction = async (
-      entry: [Account, { transaction: Transaction; signers: Array<Account> }]
-    ) => {
-      transactionSignatures.push(
-        await this._sendTransaction(connection, entry[1].transaction, [
-          entry[0],
-          ...entry[1].signers,
-        ])
-      );
-    };
+    if (matchOrdersLimit)
+      transaction.add(this.makeMatchOrdersTransaction(matchOrdersLimit));
 
-    await promiseAllInBatches(sendTransaction, Array.from(ownersMap.entries()));
-
-    return transactionSignatures;
+    return await this._sendTransaction(connection, transaction, [
+      owner,
+      ...signers,
+    ]);
   }
 
   getSplTokenBalanceFromAccountInfo(
@@ -1029,6 +1042,34 @@ export class Market {
     });
   }
 
+  /**
+   * Request a specific maximum number of compute units the transaction is
+   *  allowed to consume and an additional fee to pay.
+   * @param units Units to request
+   * @param additionalFee Additional fee to add
+   */
+  makeComputeBudgetInstruction(
+    units: number,
+    additionalFee: number = 0
+  ): TransactionInstruction {
+    const data = Buffer.from(
+      Uint8Array.of(
+        0,
+        ...new BN(units).toArray('le', 4),
+        ...new BN(additionalFee).toArray('le', 4)
+      )
+    );
+
+    const additionalComputeIx: TransactionInstruction =
+      new TransactionInstruction({
+        keys: [],
+        programId: new PublicKey('ComputeBudget111111111111111111111111111111'),
+        data,
+      });
+
+    return additionalComputeIx;
+  }
+
   private async _sendTransaction(
     connection: Connection,
     transaction: Transaction,
@@ -1148,8 +1189,6 @@ export class Market {
     owner: Account,
     orders: Order[]
   ): Promise<TransactionSignature> {
-    if (!orders.length) throw new Error('No orders provided');
-
     const transaction = new Transaction();
 
     for (const order of orders) {
@@ -1224,7 +1263,7 @@ export class Market {
     return DexInstructions.consumeEvents({
       market: this.address,
       eventQueue: this._decoded.eventQueue,
-      coinFee: this._decoded.eventQueue,
+      coinFee: this._decoded.baseMint,
       pcFee: this._decoded.eventQueue,
       openOrdersAccounts,
       limit,
@@ -1252,7 +1291,9 @@ export class Market {
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
-    referrerQuoteWallet: PublicKey | null = null
+    referrerQuoteWallet: PublicKey | null = null,
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
   ) {
     if (!openOrders.owner.equals(owner.publicKey)) {
       throw new Error('Invalid open orders account');
@@ -1260,21 +1301,58 @@ export class Market {
     if (referrerQuoteWallet && !this.supportsReferralFees) {
       throw new Error('This program ID does not support referrerQuoteWallet');
     }
-    const { transaction, signers } = await this.makeSettleFundsTransaction(
+
+    const transaction = new Transaction();
+
+    if (matchOrdersLimit)
+      transaction.add(this.makeMatchOrdersTransaction(matchOrdersLimit));
+
+    if (consumeEventsLimit) {
+      const eventQueue = await this.loadEventQueue(connection);
+
+      if (eventQueue.length > 0) {
+        const map: IMap<string, PublicKey> = IMap<
+          string,
+          PublicKey
+        >().asMutable();
+
+        for (const event of eventQueue) {
+          map.set(event.openOrders.toString(), event.openOrders);
+        }
+
+        const orderedAccounts = map
+          .sortBy((value) => value.toBuffer().swap64())
+          .toList()
+          .toJSON();
+
+        transaction.add(
+          this.makeConsumeEventsInstruction(
+            orderedAccounts.slice(0, consumeEventsLimit),
+            consumeEventsLimit
+          )
+        );
+      }
+    }
+
+    const transactionAndSigners = await this.makeSettleFundsTransaction(
       connection,
       openOrders,
       baseWallet,
       quoteWallet,
-      referrerQuoteWallet
+      referrerQuoteWallet,
+      transaction
     );
-    return await this._sendTransaction(connection, transaction, [
-      owner,
-      ...signers,
-    ]);
+
+    return await this._sendTransaction(
+      connection,
+      transactionAndSigners.transaction,
+      [owner, ...transactionAndSigners.signers]
+    );
   }
 
   async settleSeveralFunds(
     connection: Connection,
+    owner: Account,
     settlements: {
       owner: Account;
       openOrders: OpenOrders;
@@ -1282,14 +1360,42 @@ export class Market {
       quoteWallet: PublicKey;
       referrerQuoteWallet: PublicKey | null;
     }[],
-    transaction: Transaction = new Transaction()
-  ): Promise<TransactionSignature[]> {
-    const transactionSignatures = new Array<TransactionSignature>();
-    const ownersMap = new Map<
-      Account,
-      { transaction: Transaction; signers: Array<Account> }
-    >();
-    const onwersCount = new Set(settlements.map((item) => item.owner)).size;
+    transaction: Transaction = new Transaction(),
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
+  ): Promise<TransactionSignature> {
+    const onwerPublicKeyString = owner.publicKey.toString();
+    const signers: Array<Account> = [];
+
+    if (matchOrdersLimit)
+      transaction.add(this.makeMatchOrdersTransaction(matchOrdersLimit));
+
+    if (consumeEventsLimit) {
+      const eventQueue = await this.loadEventQueue(connection);
+
+      if (eventQueue.length > 0) {
+        const map: IMap<string, PublicKey> = IMap<
+          string,
+          PublicKey
+        >().asMutable();
+
+        for (const event of eventQueue) {
+          map.set(event.openOrders.toString(), event.openOrders);
+        }
+
+        const orderedAccounts = map
+          .sortBy((value) => value.toBuffer().swap64())
+          .toList()
+          .toJSON();
+
+        transaction.add(
+          this.makeConsumeEventsInstruction(
+            orderedAccounts.slice(0, consumeEventsLimit),
+            consumeEventsLimit
+          )
+        );
+      }
+    }
 
     for (const {
       owner,
@@ -1298,26 +1404,22 @@ export class Market {
       quoteWallet,
       referrerQuoteWallet = null,
     } of settlements) {
-      if (!openOrders.owner.equals(owner.publicKey)) {
-        throw new Error('Invalid open orders account');
+      if (owner.publicKey.toString() != onwerPublicKeyString) {
+        throw new Error('Invalid settlement owner account.');
+      }
+
+      if (openOrders.owner.toString() != owner.publicKey.toString()) {
+        throw new Error('Invalid open orders owner account.');
       }
 
       if (referrerQuoteWallet && !this.supportsReferralFees) {
-        throw new Error('This program ID does not support referrerQuoteWallet');
+        throw new Error(
+          'This program ID does not support referrerQuoteWallet.'
+        );
       }
-
-      let item = ownersMap.get(owner);
-      if (!item) {
-        item = { transaction: new Transaction(), signers: [] };
-        ownersMap.set(owner, item);
-      }
-
-      const targetTransaction: Transaction =
-        onwersCount == 1 ? transaction : item.transaction;
-      const signers: Array<Account> = item.signers;
 
       const partial = await this.makeSettleFundsTransactionForBatch(
-        targetTransaction,
+        transaction,
         connection,
         openOrders,
         baseWallet,
@@ -1328,20 +1430,10 @@ export class Market {
       signers.push(...partial.signers);
     }
 
-    const sendTransaction = async (
-      entry: [Account, { transaction: Transaction; signers: Array<Account> }]
-    ) => {
-      transactionSignatures.push(
-        await this._sendTransaction(connection, entry[1].transaction, [
-          entry[0],
-          ...entry[1].signers,
-        ])
-      );
-    };
-
-    await promiseAllInBatches(sendTransaction, Array.from(ownersMap.entries()));
-
-    return transactionSignatures;
+    return await this._sendTransaction(connection, transaction, [
+      owner,
+      ...signers,
+    ]);
   }
 
   async makeSettleFundsTransaction(
@@ -1349,7 +1441,8 @@ export class Market {
     openOrders: OpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
-    referrerQuoteWallet: PublicKey | null = null
+    referrerQuoteWallet: PublicKey | null = null,
+    transaction?: Transaction
   ) {
     const vaultSigner = await PublicKey.createProgramAddress(
       [
@@ -1359,7 +1452,10 @@ export class Market {
       this._programId
     );
 
-    const transaction = new Transaction();
+    if (!transaction) {
+      transaction = new Transaction();
+    }
+
     const signers: Account[] = [];
 
     let wrappedSolAccount: Account | null = null;
@@ -1663,6 +1759,51 @@ export class Market {
 
   get tickSize() {
     return this.priceLotsToNumber(new BN(1));
+  }
+
+  async crank(
+    connection: Connection,
+    owner: Account,
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
+  ): Promise<TransactionSignature> {
+    const transaction = new Transaction();
+    const signers: Array<Account> = [];
+
+    if (consumeEventsLimit) {
+      const eventQueue = await this.loadEventQueue(connection);
+
+      if (eventQueue.length > 0) {
+        const map: IMap<string, PublicKey> = IMap<
+          string,
+          PublicKey
+        >().asMutable();
+
+        for (const event of eventQueue) {
+          map.set(event.openOrders.toString(), event.openOrders);
+        }
+
+        const orderedAccounts = map
+          .sortBy((value) => value.toBuffer().swap64())
+          .toList()
+          .toJSON();
+
+        transaction.add(
+          this.makeConsumeEventsInstruction(
+            orderedAccounts.slice(0, consumeEventsLimit),
+            consumeEventsLimit
+          )
+        );
+      }
+    }
+
+    if (matchOrdersLimit)
+      transaction.add(this.makeMatchOrdersTransaction(matchOrdersLimit));
+
+    return await this._sendTransaction(connection, transaction, [
+      owner,
+      ...signers,
+    ]);
   }
 }
 
