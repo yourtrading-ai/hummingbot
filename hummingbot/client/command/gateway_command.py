@@ -120,7 +120,7 @@ class GatewayCommand(GatewayChainApiManager):
                         return
                     self.notify("Invalid input. Please try again or exit config [CTRL + x].\n")
 
-        cert_path: str = get_gateway_paths(self.client_config_map).local_certs_path.as_posix()
+        cert_path: str = get_gateway_paths(self.client_config_map).mount_certs_path.as_posix()
         current_path: str = self.client_config_map.certs.path
         if not GATEWAY_SSL_CONF_FILE.exists() and not bypass_source_check:
             self.notify("\nSSL configuration file not found. Please use `gateway/setup/generate_conf.sh` to generate it.")
