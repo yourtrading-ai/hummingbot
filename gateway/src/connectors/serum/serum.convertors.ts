@@ -26,12 +26,13 @@ import {
   OrderSide,
   OrderStatus,
   OrderType,
-  SettleFundsResponse,
   SerumMarket,
   SerumOrder,
   SerumOrderBook,
   SerumOrderParams,
+  SettleFundsResponse,
   Ticker,
+  TransactionSignatures,
 } from './serum.types';
 
 export enum Types {
@@ -204,7 +205,7 @@ export const convertArrayOfSerumOrdersToMapOfOrders = (
 
   for (const order of orders) {
     result.set(
-      order.clientId || order.orderId,
+      order.orderId || order.clientId,
       convertSerumOrderToOrder(
         market,
         order,
@@ -237,10 +238,16 @@ export const convertSerumOrderToOrder = (
   orderParameters?: SerumOrderParams<any>,
   ownerAddress?: string,
   status?: OrderStatus,
-  signature?: string
+  signatures?: TransactionSignatures
 ): Order => {
   return {
-    id: order?.clientId?.toString() || candidate?.id || undefined,
+    id:
+      order?.clientId?.toString() ||
+      // eslint-disable-next-line
+      // @ts-ignore
+      order?.clientOrderId?.toString() ||
+      candidate?.id ||
+      undefined,
     exchangeId: order?.orderId.toString() || undefined, // TODO check the possibility to retrieve the exchange id from a new order.
     marketName: market.name,
     ownerAddress: ownerAddress || candidate?.ownerAddress,
@@ -262,7 +269,7 @@ export const convertSerumOrderToOrder = (
         ? convertSerumTypeToOrderType(orderParameters.orderType)
         : undefined,
     fillmentTimestamp: undefined,
-    signature: signature,
+    signatures: signatures,
     order: order,
   };
 };
@@ -333,7 +340,8 @@ export const convertToCreateOrderResponse = (
     side: input.side,
     status: input.status,
     type: input.type,
-    signature: input.signature,
+    signature: getNotNullOrThrowError<TransactionSignatures>(input.signatures)
+      .creation,
   };
 };
 
@@ -353,7 +361,7 @@ export const convertToCancelOrderResponse = (
     side: input.side,
     status: input.status,
     type: input.type,
-    signature: input.signature,
+    signatures: input.signatures,
   };
 };
 
@@ -380,7 +388,7 @@ export const convertToGetFilledOrderResponse = (
     id: input.id,
     exchangeId: input.exchangeId,
     marketName: input.marketName,
-    ownerAddress: input.ownerAddress,
+    // ownerAddress: input.ownerAddress,
     price: input.price,
     amount: input.amount,
     side: input.side,
