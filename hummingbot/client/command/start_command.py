@@ -31,6 +31,9 @@ GATEWAY_READY_TIMEOUT = 300  # seconds
 class StartCommand(GatewayChainApiManager):
     _in_start_check: bool = False
 
+    def __init__(self):
+        self.strategy = None
+
     async def _run_clock(self):
         with self.clock as clock:
             await clock.run()
@@ -193,11 +196,8 @@ class StartCommand(GatewayChainApiManager):
 
     def start_script_strategy(self):
         script_strategy = ScriptStrategyBase.load_script_class(self.strategy_file_name)
-        markets_list = []
-        for conn, pairs in script_strategy.markets.items():
-            markets_list.append((conn, list(pairs)))
-        self._initialize_markets(markets_list)
-        self.strategy = script_strategy(self.markets)
+        self.strategy = script_strategy()
+        asyncio.get_event_loop().run_until_complete(self.strategy.initialize(self))
 
     def is_current_strategy_script_strategy(self) -> bool:
         script_file_name = settings.SCRIPT_STRATEGIES_PATH / f"{self.strategy_file_name}.py"
