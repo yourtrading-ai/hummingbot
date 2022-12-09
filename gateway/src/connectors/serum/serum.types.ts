@@ -7,6 +7,8 @@ import {
   OpenOrders as SOpenOrders,
   Order as SOrder,
   OrderParams as SOrderParams,
+  OrderParamsAccounts,
+  OrderParamsBase,
 } from '@project-serum/serum/lib/market';
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
 import BN from 'bn.js';
@@ -33,11 +35,14 @@ export type SerumOrderParams<T> = SOrderParams<T>;
 export type SerumMarketOptions = SMarketOptions;
 export type SerumOpenOrders = SOpenOrders;
 export const SerumOpenOrders = SOpenOrders;
+export type SerumOrderParamsAccounts = OrderParamsAccounts;
+export type SerumOrderParamsBase<T> = OrderParamsBase<T>;
 
 export type OriginalSerumMarket = SMarket;
 
 interface PlainBasicSerumMarket {
   address: string;
+  tickerAddress?: string; // Address to be used to retrieve ticker (current price) information
   deprecated: boolean;
   name: string;
   programId: string;
@@ -45,6 +50,7 @@ interface PlainBasicSerumMarket {
 
 interface FatBasicSerumMarket {
   address: PublicKey;
+  tickerAddress?: PublicKey; // Address to be used to retrieve ticker (current price) information
   name: string;
   programId: PublicKey;
   deprecated: boolean;
@@ -73,7 +79,9 @@ export enum OrderType {
 }
 
 export enum TickerSource {
+  PYTH = 'pyth',
   NOMIMCS = 'nomics',
+  LAST_FILLED_ORDER = 'lastFilledOrder',
   ALEPH = 'aleph',
 }
 
@@ -116,9 +124,18 @@ export interface Order {
   status?: OrderStatus;
   type?: OrderType;
   fillmentTimestamp?: number;
-  signature?: string;
+  signatures?: TransactionSignatures;
   order?: SerumOrder;
 }
+
+export type TransactionSignatures = {
+  creation?: TransactionSignature;
+  cancellation?: TransactionSignature;
+  fundsSettlement?: TransactionSignature;
+  creations?: TransactionSignature[];
+  cancellations?: TransactionSignature[];
+  fundsSettlements?: TransactionSignature[];
+};
 
 export type Fund = TransactionSignature;
 
@@ -185,6 +202,7 @@ export interface GetOrderRequest {
   exchangeId?: string;
   marketName?: string;
   ownerAddress: string;
+  limit?: number;
 }
 
 export interface GetOrdersRequest {
@@ -192,6 +210,7 @@ export interface GetOrdersRequest {
   exchangeIds?: string[];
   marketName?: string;
   ownerAddress: string;
+  limit?: number;
 }
 
 export interface GetOrderResponse {
@@ -222,6 +241,7 @@ export interface CreateOrdersRequest {
   price: number;
   amount: number;
   type?: OrderType;
+  replaceIfExists?: boolean;
 }
 
 export interface CreateOrderResponse {
@@ -235,7 +255,7 @@ export interface CreateOrderResponse {
   status?: OrderStatus;
   type?: OrderType;
   fee?: number;
-  signature?: string;
+  signature?: TransactionSignature;
 }
 
 export type CreateOrdersResponse =
@@ -267,7 +287,7 @@ export interface CancelOrderResponse {
   status?: OrderStatus;
   type?: OrderType;
   fee?: number;
-  signature?: string;
+  signatures?: TransactionSignatures;
 }
 
 export type CancelOrdersResponse =
@@ -317,14 +337,15 @@ export interface GetFilledOrdersRequest {
   ids?: string[];
   exchangeIds?: string[];
   marketName?: string;
-  ownerAddress?: string;
+  // ownerAddress?: string;
+  limit?: number;
 }
 
 export interface GetFilledOrderResponse {
   id?: string;
   exchangeId?: string;
   marketName: string;
-  ownerAddress?: string;
+  // ownerAddress?: string;
   price: number;
   amount: number;
   side: OrderSide;

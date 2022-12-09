@@ -57,12 +57,14 @@ export type SerumGetTickersResponse = GetTickersResponse;
 
 export type SerumGetOrdersRequest = NetworkSelectionRequest &
   (
-    | { ownerAddress: string }
+    | { ownerAddress: string; marketName: string; marketNames?: string[] }
     | { order: GetOrderRequest }
     | {
         orders: GetOrdersRequest[];
       }
-  );
+  ) & {
+    limit?: number;
+  };
 
 export type SerumGetOrdersResponse = GetOrdersResponse;
 
@@ -76,7 +78,7 @@ export type SerumCreateOrdersRequest = NetworkSelectionRequest &
     | {
         orders: CreateOrdersRequest[];
       }
-  );
+  ) & { replaceIfExists?: boolean };
 
 export type SerumCreateOrdersResponse = CreateOrdersResponse;
 
@@ -86,7 +88,7 @@ export type SerumCreateOrdersResponse = CreateOrdersResponse;
 
 export type SerumCancelOrdersRequest = NetworkSelectionRequest &
   (
-    | { ownerAddress: string }
+    | { ownerAddress: string; marketName: string; marketNames?: string[] }
     | { order: CancelOrderRequest }
     | {
         orders: CancelOrdersRequest[];
@@ -101,7 +103,7 @@ export type SerumCancelOrdersResponse = CancelOrdersResponse;
 
 export type SerumGetOpenOrdersRequest = NetworkSelectionRequest &
   (
-    | { ownerAddress: string }
+    | { ownerAddress: string; marketName: string; marketNames?: string[] }
     | { order: GetOpenOrderRequest }
     | {
         orders: GetOpenOrdersRequest[];
@@ -116,12 +118,18 @@ export type SerumGetOpenOrdersResponse = GetOpenOrdersResponse;
 
 export type SerumGetFilledOrdersRequest = NetworkSelectionRequest &
   (
-    | { ownerAddress: string }
+    | {
+        // ownerAddress: string;
+        marketName: string;
+        marketNames?: string[];
+      }
     | { order: GetFilledOrderRequest }
     | {
         orders: GetFilledOrdersRequest[];
       }
-  );
+  ) & {
+    limit?: number;
+  };
 
 export type SerumGetFilledOrdersResponse = GetFilledOrdersResponse;
 
