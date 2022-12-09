@@ -1,9 +1,43 @@
 cache:
+  marketsInformation: 3600 # in seconds
   markets: 3600 # in seconds
+events:
+  limit:
+    consumeEvents: 10
+    matchOrders: 10
+orders:
+  create:
+    maxPerTransaction: 8
+  cancel:
+    maxPerTransaction: 25
+  filled:
+    limit: 1000
 markets:
-  url: https://raw.githubusercontent.com/project-serum/serum-ts/master/packages/serum/src/markets.json
+#  url: /root/gateway/conf/connectors/serum/markets.json
+#  url: https://raw.githubusercontent.com/project-serum/serum-ts/master/packages/serum/src/markets.json
+  url: ./markets.json
   whitelist:
+    - SOL/USDC
+    - ETH/USDC
+    - USDT/USDC
+    - mSOL/USDC
+    - SLND/USDC
+    - DUMMY/USDC
+    - SOL/USDC (NEW)
+    - ETH/USDC (NEW)
+    - USDT/USDC (NEW)
+    - mSOL/USDC (NEW)
+    - SLND/USDC (NEW)
   blacklist:
 tickers:
-  source: nomics
-  url: https://nomics.com/data/exchange-markets-ticker?convert=USD&exchange=serum_dex&interval=1d&market=${marketAddress}
+  sources:
+    pyth:
+    nomics:
+      url: https://nomics.com/data/exchange-markets-ticker?convert=USD&exchange=serum_dex&interval=1m&market=${marketAddress}
+#      url: https://nomics.com/data/exchange-markets-ticker?convert=USD&exchange=serum_dex&currency=<tokenAddress>&interval=1m&limit=1&start=0&status=active
+#    lastFilledOrder:
+transactions:
+  merge:
+    createOrders: true
+    cancelOrders: true
+    settleFunds: true
