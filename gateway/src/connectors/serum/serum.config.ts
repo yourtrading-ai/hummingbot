@@ -7,6 +7,7 @@ export namespace SerumConfig {
     tradingTypes: Array<string>;
     markets: MarketsConfig;
     tickers: TickersConfig;
+    transactions: TransactionsConfig;
   }
 
   export interface MarketsConfig {
@@ -16,8 +17,19 @@ export namespace SerumConfig {
   }
 
   export interface TickersConfig {
-    source: string;
+    sources: Map<string, SourcesConfig>;
+  }
+
+  export interface SourcesConfig {
     url: string;
+  }
+
+  export interface TransactionsConfig {
+    merge: {
+      createOrders: boolean;
+      cancelOrders: boolean;
+      settleFunds: boolean;
+    };
   }
 
   export const config: Config = {
@@ -28,8 +40,24 @@ export namespace SerumConfig {
       whiteList: ConfigManagerV2.getInstance().get(`serum.markets.whitelist`),
     },
     tickers: {
-      source: ConfigManagerV2.getInstance().get(`serum.tickers.source`),
-      url: ConfigManagerV2.getInstance().get(`serum.tickers.url`),
+      sources: new Map(
+        Object.entries(
+          ConfigManagerV2.getInstance().get(`serum.tickers.sources`)
+        )
+      ),
+    },
+    transactions: {
+      merge: {
+        createOrders: ConfigManagerV2.getInstance().get(
+          `serum.transactions.merge.createOrders`
+        ),
+        cancelOrders: ConfigManagerV2.getInstance().get(
+          `serum.transactions.merge.cancelOrders`
+        ),
+        settleFunds: ConfigManagerV2.getInstance().get(
+          `serum.transactions.merge.settleFunds`
+        ),
+      },
     },
     availableNetworks: [
       {
