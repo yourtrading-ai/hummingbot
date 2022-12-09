@@ -4,10 +4,64 @@
   "properties": {
     "cache": {
       "type": "object",
-      "required": ["markets"],
+      "required": ["marketsInformation", "markets"],
       "properties": {
+        "marketsInformation": {
+          "type": "integer"
+        },
         "markets": {
           "type": "integer"
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "required": ["limit"],
+      "properties": {
+        "limit": {
+          "type": "object",
+					"required": ["consumeEvents", "matchOrders"],
+					"properties": {
+						"consumeEvents": {
+							"type": "integer"
+						},
+            "matchOrders": {
+							"type": "integer"
+						}
+					}
+        }
+      }
+    },
+		"orders": {
+      "type": "object",
+      "required": ["create", "cancel", "filled"],
+      "properties": {
+        "create": {
+          "type": "object",
+					"required": ["maxPerTransaction"],
+					"properties": {
+						"maxPerTransaction": {
+							"type": "integer"
+						}
+					}
+        },
+        "cancel": {
+          "type": "object",
+					"required": ["maxPerTransaction"],
+					"properties": {
+						"maxPerTransaction": {
+							"type": "integer"
+						}
+					}
+        },
+        "filled": {
+          "type": "object",
+					"required": ["limit"],
+					"properties": {
+						"limit": {
+							"type": "integer"
+						}
+					}
         }
       }
     },
@@ -26,17 +80,50 @@
     },
     "tickers": {
       "type": "object",
-      "required": ["source", "url"],
+      "required": ["sources"],
       "properties": {
-        "source": { "type": "string" },
-        "url": { "type": "string" }
+        "sources": {
+          "type": "object",
+          "patternProperties": {
+            "^..+$": {
+              "type": ["object", "null"],
+              "properties": {
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+		"transactions": {
+      "type": "object",
+      "required": ["merge"],
+      "properties": {
+        "merge": {
+          "type": "object",
+					"required": ["createOrders", "cancelOrders", "settleFunds"],
+					"properties": {
+						"createOrders": { "type": "boolean" },
+						"cancelOrders": { "type": "boolean" },
+						"settleFunds": { "type": "boolean" }
+					}
+        }
       }
     }
-  },
+	},
   "required": [
+		"cache",
+		"orders",
     "markets",
     "tickers",
-    "cache"
+		"transactions"
   ],
   "additionalProperties": false
 }

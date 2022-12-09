@@ -57,6 +57,13 @@
         }
       }
     },
+		"tokens": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string" }
+      }
+    },
     "tokenProgram": { "type": "string" },
     "transactionLamports": { "type": "integer" },
     "lamportsToSol": { "type": "number" },
@@ -68,6 +75,7 @@
     "retry",
     "timeout",
     "parallel",
+		"tokens",
     "tokenProgram",
     "transactionLamports",
     "lamportsToSol",
