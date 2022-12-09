@@ -20,6 +20,7 @@ import {
 } from '../../chains/solana/solana.config';
 import { SerumConfig } from './serum.config';
 import { default as constants } from './serum.constants';
+import { default as solanaConstants } from '../../chains/solana/solana.constants';
 import {
   convertArrayOfSerumOrdersToMapOfOrders,
   convertMarketBidsAndAsksToOrderBook,
@@ -34,6 +35,7 @@ import {
   getRandonBN,
   promiseAllInBatches,
   runWithRetryAndTimeout,
+  splitInChunks,
 } from './serum.helpers';
 import {
   BasicSerumMarket,
@@ -62,10 +64,19 @@ import {
   SerumOrder,
   SerumOrderBook,
   SerumOrderParams,
+  SerumOrderParamsAccounts,
+  SerumOrderParamsBase,
   Ticker,
   TickerNotFoundError,
   TickerSource,
+  TransactionSignatures,
 } from './serum.types';
+import { PythCluster } from '@pythnetwork/client/lib/cluster';
+import {
+  getPythProgramKeyForCluster,
+  PriceData,
+  PythHttpClient,
+} from '@pythnetwork/client';
 
 const caches = {
   instances: new CacheContainer(new MemoryStorage()),
@@ -111,7 +122,8 @@ export class Serum {
     this.connection = new Connection(this.solanaConfig.network.nodeUrl);
   }
 
-  private async serumGetMarketsInformation(): Promise<BasicSerumMarket[]> {
+  @Cache(caches.markets, { ttl: constants.cache.marketsInformation })
+  async serumGetMarketsInformation(): Promise<BasicSerumMarket[]> {
     const marketsURL =
       this.config.markets.url ||
       'https://raw.githubusercontent.com/project-serum/serum-ts/master/packages/serum/src/markets.json';
@@ -119,9 +131,13 @@ export class Serum {
     let marketsInformation: BasicSerumMarket[];
 
     try {
-      marketsInformation = (
-        await runWithRetryAndTimeout<any>(axios, axios.get, [marketsURL])
-      ).data;
+      if (!marketsURL.startsWith('https')) {
+        marketsInformation = require(marketsURL);
+      } else {
+        marketsInformation = (
+          await runWithRetryAndTimeout<any>(axios, axios.get, [marketsURL])
+        ).data;
+      }
     } catch (e) {
       marketsInformation = MARKETS;
     }
@@ -206,7 +222,7 @@ export class Serum {
   private async serumMarketLoadFills(
     market: SerumMarket,
     connection: Connection,
-    limit?: number
+    limit: number = constants.orders.filled.limit
   ): Promise<any[]> {
     return await runWithRetryAndTimeout<Promise<any[]>>(
       market,
@@ -237,65 +253,65 @@ export class Serum {
     );
   }
 
-  // /**
-  //  * 1 external API call.
-  //  *
-  //  * @param market
-  //  * @param connection
-  //  * @param owner
-  //  * @param payer
-  //  * @param side
-  //  * @param price
-  //  * @param size
-  //  * @param orderType
-  //  * @param clientId
-  //  * @param openOrdersAddressKey
-  //  * @param openOrdersAccount
-  //  * @param feeDiscountPubkey
-  //  * @param maxTs
-  //  * @param replaceIfExists
-  //  * @private
-  //  */
-  // private async serumMarketPlaceOrder(
-  //   market: SerumMarket,
-  //   connection: Connection,
-  //   {
-  //     owner,
-  //     payer,
-  //     side,
-  //     price,
-  //     size,
-  //     orderType,
-  //     clientId,
-  //     openOrdersAddressKey,
-  //     openOrdersAccount,
-  //     feeDiscountPubkey,
-  //     maxTs,
-  //     replaceIfExists,
-  //   }: SerumOrderParams<Account>
-  // ): Promise<TransactionSignature> {
-  //   return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
-  //     market,
-  //     market.placeOrder,
-  //     [
-  //       connection,
-  //       {
-  //         owner,
-  //         payer,
-  //         side,
-  //         price,
-  //         size,
-  //         orderType,
-  //         clientId,
-  //         openOrdersAddressKey,
-  //         openOrdersAccount,
-  //         feeDiscountPubkey,
-  //         maxTs,
-  //         replaceIfExists,
-  //       },
-  //     ]
-  //   );
-  // }
+  /**
+   * 1 external API call.
+   *
+   * @param market
+   * @param connection
+   * @param owner
+   * @param payer
+   * @param side
+   * @param price
+   * @param size
+   * @param orderType
+   * @param clientId
+   * @param openOrdersAddressKey
+   * @param openOrdersAccount
+   * @param feeDiscountPubkey
+   * @param maxTs
+   * @param replaceIfExists
+   * @private
+   */
+  private async serumMarketPlaceOrder(
+    market: SerumMarket,
+    connection: Connection,
+    {
+      owner,
+      payer,
+      side,
+      price,
+      size,
+      orderType,
+      clientId,
+      openOrdersAddressKey,
+      openOrdersAccount,
+      feeDiscountPubkey,
+      maxTs,
+      replaceIfExists,
+    }: SerumOrderParams<Account>
+  ): Promise<TransactionSignature> {
+    return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
+      market,
+      market.placeOrder,
+      [
+        connection,
+        {
+          owner,
+          payer,
+          side,
+          price,
+          size,
+          orderType,
+          clientId,
+          openOrdersAddressKey,
+          openOrdersAccount,
+          feeDiscountPubkey,
+          maxTs,
+          replaceIfExists,
+        },
+      ]
+    );
+  }
 
   /**
    * Place one or more orders in a single transaction for each owner informed.
@@ -303,37 +319,96 @@ export class Serum {
    *
    * @param market
    * @param connection
+   * @param owner
    * @param orders
+   * @param matchOrdersLimit
+   * @param consumeEventsLimit
    * @private
    */
   private async serumMarketPlaceOrders(
     market: SerumMarket,
     connection: Connection,
-    orders: SerumOrderParams<Account>[]
-  ): Promise<TransactionSignature[]> {
-    return await runWithRetryAndTimeout<Promise<TransactionSignature[]>>(
+    owner: Account,
+    orders: SerumOrderParams<Account>[],
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
+  ): Promise<TransactionSignature> {
+    return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
       market,
       market.placeOrders,
-      [connection, orders]
+      [connection, owner, orders, matchOrdersLimit, consumeEventsLimit]
     );
   }
 
-  // /**
-  //  * 1 external API call.
-  //  *
-  //  * @param market
-  //  * @param connection
-  //  * @param owner
-  //  * @param order
-  //  * @private
-  //  */
-  // private async serumMarketCancelOrder(market: SerumMarket, connection: Connection, owner: Account, order: SerumOrder): Promise<TransactionSignature> {
-  //   return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
-  //     market,
-  //     market.cancelOrder,
-  //     [connection, owner, order]
-  //   );
-  // }
+  /**
+   * Replace one or more orders in a single transaction.
+   * 1 external API calls.
+   *
+   * @param market
+   * @param connection
+   * @param accounts
+   * @param orders
+   * @param cacheDurationMs
+   * @private
+   */
+  private async serumMarketReplaceOrders(
+    market: SerumMarket,
+    connection: Connection,
+    accounts: SerumOrderParamsAccounts,
+    orders: SerumOrderParamsBase<Account>[],
+    cacheDurationMs = 0
+  ): Promise<TransactionSignature> {
+    return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
+      market,
+      market.replaceOrders,
+      [connection, accounts, orders, cacheDurationMs]
+    );
+  }
+
+  /**
+   * 1 external API call.
+   *
+   * @param market
+   * @param connection
+   * @param owner
+   * @param order
+   * @private
+   */
+  private async serumMarketCancelOrder(
+    market: SerumMarket,
+    connection: Connection,
+    owner: Account,
+    order: SerumOrder
+  ): Promise<TransactionSignature> {
+    return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
+      market,
+      market.cancelOrder,
+      [connection, owner, order]
+    );
+  }
+
+  /**
+   *
+   * @param market
+   * @param connection
+   * @param owner
+   * @param orders
+   * @private
+   */
+  private async serumMarketCancelOrders(
+    market: SerumMarket,
+    connection: Connection,
+    owner: Account,
+    orders: SerumOrder[]
+  ): Promise<TransactionSignatures> {
+    const cancellationSignature = await runWithRetryAndTimeout<
+      Promise<TransactionSignature>
+    >(market, market.cancelOrders, [connection, owner, orders]);
+
+    return {
+      cancellation: cancellationSignature,
+    };
+  }
 
   /**
    * Cancel one or more order in a single transaction.
@@ -345,12 +420,14 @@ export class Serum {
    * @param orders
    * @private
    */
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
   private async serumMarketCancelOrdersAndSettleFunds(
     market: SerumMarket,
     connection: Connection,
     owner: Account,
     orders: SerumOrder[]
-  ): Promise<{ cancellation: string; fundsSettlement: string }> {
+  ): Promise<TransactionSignatures> {
     const cancellationSignature = await runWithRetryAndTimeout<
       Promise<TransactionSignature>
     >(market, market.cancelOrders, [connection, owner, orders]);
@@ -399,19 +476,18 @@ export class Serum {
     }
 
     try {
-      const fundsSettlementSignature = (
-        await this.serumSettleSeveralFunds(
-          market,
-          connection,
-          fundsSettlements,
-          new Transaction() // There's only one owner.
-        )
-      )[0]; // There's only one owner.
+      const fundsSettlementSignature = await this.serumSettleSeveralFunds(
+        market,
+        connection,
+        fundsSettlements[0].owner, // There's only one owner.
+        fundsSettlements,
+        new Transaction() // There's only one owner.
+      ); // There's only one owner.
 
       return {
         cancellation: cancellationSignature,
         fundsSettlement: fundsSettlementSignature,
-      };
+      } as TransactionSignatures;
     } catch (exception: any) {
       if (
         exception.message.includes('It is unknown if it succeeded or failed.')
@@ -507,6 +583,8 @@ export class Serum {
    * @param baseWallet
    * @param quoteWallet
    * @param referrerQuoteWallet
+   * @param matchOrdersLimit
+   * @param consumeEventsLimit
    * @private
    */
   private async serumSettleFunds(
@@ -516,7 +594,9 @@ export class Serum {
     openOrders: SerumOpenOrders,
     baseWallet: PublicKey,
     quoteWallet: PublicKey,
-    referrerQuoteWallet?: PublicKey | null
+    referrerQuoteWallet?: PublicKey | null,
+    matchOrdersLimit?: number,
+    consumeEventsLimit?: number
   ): Promise<TransactionSignature> {
     return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
       market,
@@ -528,6 +608,8 @@ export class Serum {
         baseWallet,
         quoteWallet,
         referrerQuoteWallet,
+        matchOrdersLimit,
+        consumeEventsLimit,
       ]
     );
   }
@@ -538,6 +620,7 @@ export class Serum {
    *
    * @param market
    * @param connection
+   * @param owner
    * @param settlements
    * @param transaction
    * @private
@@ -545,6 +628,7 @@ export class Serum {
   private async serumSettleSeveralFunds(
     market: SerumMarket,
     connection: Connection,
+    owner: Account,
     settlements: {
       owner: Account;
       openOrders: SerumOpenOrders;
@@ -553,11 +637,11 @@ export class Serum {
       referrerQuoteWallet: PublicKey | null;
     }[],
     transaction: Transaction = new Transaction()
-  ): Promise<TransactionSignature[]> {
-    return await runWithRetryAndTimeout<Promise<TransactionSignature[]>>(
+  ): Promise<TransactionSignature> {
+    return await runWithRetryAndTimeout<Promise<TransactionSignature>>(
       market,
       market.settleSeveralFunds,
-      [connection, settlements, transaction]
+      [connection, owner, settlements, transaction]
     );
   }
 
@@ -678,7 +762,9 @@ export class Serum {
       const serumMarket = await this.serumLoadMarket(
         this.connection,
         new PublicKey(market.address),
-        {},
+        {
+          // skipPreflight: true
+        },
         new PublicKey(market.programId)
       );
 
@@ -746,39 +832,104 @@ export class Serum {
   async getTicker(marketName: string): Promise<Ticker> {
     const market = await this.getMarket(marketName);
 
-    try {
-      if (this.config.tickers.source === TickerSource.NOMIMCS) {
-        const url = (
-          this.config.tickers.url ||
-          'https://nomics.com/data/exchange-markets-ticker?convert=USD&exchange=serum_dex&interval=1d&market=${marketAddress}'
-        ).replace('${marketAddress}', market.address.toString());
+    for (const [source, config] of this.config.tickers.sources) {
+      try {
+        if (source === TickerSource.NOMIMCS) {
+          const marketsInformation = await this.serumGetMarketsInformation();
+          const basicMarketInformation: BasicSerumMarket =
+            marketsInformation.filter(
+              (item) => !item.deprecated && item.address == market.address
+            )[0];
 
-        const result: { price: any; last_updated_at: any } = (
-          await axios.get(url)
-        ).data.items[0];
+          let tickerAddress = market.address.toString();
+          if (basicMarketInformation['tickerAddress'])
+            tickerAddress = basicMarketInformation['tickerAddress'].toString();
 
-        return convertToTicker(result);
+          const finalUrl = (
+            config.url ||
+            'https://nomics.com/data/exchange-markets-ticker?convert=USD&exchange=serum_dex&interval=1m&market=${marketAddress}'
+          ).replace('${marketAddress}', tickerAddress);
+
+          const result: { price: any; last_updated_at: any } = (
+            await runWithRetryAndTimeout(
+              axios,
+              axios.get,
+              [finalUrl],
+              solanaConstants.retry.all.maxNumberOfRetries,
+              0
+            )
+          ).data.items[0];
+
+          return convertToTicker(result);
+        } else if (source == TickerSource.PYTH) {
+          const pythPublicKey = getPythProgramKeyForCluster(
+            this.network as PythCluster
+          );
+          const pythClient = new PythHttpClient(this.connection, pythPublicKey);
+
+          const split = marketName.split('/');
+          const base = split[0]
+            .replace(/(.*)\s\(NEW\)/, '$1')
+            .replace(/([A-Za-z]+)/, '$1');
+          const quote = split[1]
+            .replace(/(.*)\s\(NEW\)/, '$1')
+            .replace(/([A-Za-z]+)/, '$1')
+            .replace(/B*USD[CT]*/, 'USD');
+          const symbol = `Crypto.${base}/${quote}`;
+
+          const result = await runWithRetryAndTimeout(
+            null,
+            async function getPythPrice() {
+              const data = await pythClient.getData();
+              const result = data.productPrice.get(symbol);
+
+              return getNotNullOrThrowError(result);
+            },
+            [symbol],
+            solanaConstants.retry.all.maxNumberOfRetries,
+            0
+          );
+
+          const ticker = {
+            price: getNotNullOrThrowError<number>(
+              getNotNullOrThrowError<PriceData>(result).price
+            ),
+            timestamp: Date.now(),
+            ticker: result,
+          };
+
+          return ticker;
+        } else if (source === TickerSource.LAST_FILLED_ORDER) {
+          const filledOrders = await this.getFilledOrdersForMarket(market.name);
+
+          if (filledOrders.size) {
+            const lastFilledOrder = filledOrders.values().next().value;
+
+            const ticker = {
+              price: lastFilledOrder.price,
+              timestamp: Date.now(),
+              ticker: lastFilledOrder,
+            };
+
+            return ticker;
+          } else {
+            throw new TickerNotFoundError(
+              `Ticker data is currently not available for market "${marketName}".`
+            );
+          }
+        } else {
+          throw new TickerNotFoundError(
+            `Ticker source (${source}) not supported, check your serum configuration file.`
+          );
+        }
+      } catch (exception) {
+        // Ignoring so other sources can be tried.
       }
-    } catch (exception) {
-      throw new TickerNotFoundError(
-        `Ticker data is currently not available for market "${marketName}".`
-      );
     }
 
     throw new TickerNotFoundError(
-      `Ticker source (${this.config.tickers.source}) not supported, check your serum configuration file.`
+      `Ticker data is currently not available for market "${marketName}".`
     );
-
-    // // The implementation below should be the preferred one, but it is not always available
-    // const market = await this.getMarket(marketName);
-    //
-    // const filledOrders = await this.serumMarketLoadFills(market.market, this.connection);
-    // if (!filledOrders || !filledOrders.length)
-    //   throw new TickerNotFoundError(`Ticker data is currently not available for market "${marketName}".`);
-    //
-    // const mostRecentFilledOrder = filledOrders[0];
-    //
-    // return convertToTicker(Date.now(), mostRecentFilledOrder);
   }
 
   /**
@@ -967,7 +1118,7 @@ export class Serum {
       );
     };
 
-    await promiseAllInBatches<Market, Promise<void>>(
+    await promiseAllInBatches<Market, void>(
       getOpenOrders,
       Array.from(markets.values())
     );
@@ -976,14 +1127,20 @@ export class Serum {
   }
 
   /**
-   * $numberOfAllowedMarkets external API calls.
+   * $numberOfAllowedMarkets or $numberOfInformedMarkets external API calls.
    *
    * @param ownerAddress
+   * @param marketName
+   * @param marketNames
    */
   async getAllOpenOrders(
-    ownerAddress: string
+    ownerAddress: string,
+    marketName?: string,
+    marketNames?: string[]
   ): Promise<IMap<string, IMap<string, Order>>> {
-    const marketNames = Array.from((await this.getAllMarkets()).keys());
+    if (marketName) marketNames = [marketName];
+    else if (!marketNames)
+      marketNames = Array.from((await this.getAllMarkets()).keys());
 
     return await this.getOpenOrdersForMarkets(marketNames, ownerAddress);
   }
@@ -992,19 +1149,23 @@ export class Serum {
    * 1 or $numberOfAllowedMarkets external API calls.
    *
    * @param target
+   * @param limit
    */
-  async getFilledOrder(target: GetFilledOrderRequest): Promise<Order> {
+  async getFilledOrder(
+    target: GetFilledOrderRequest,
+    limit?: number
+  ): Promise<Order> {
     if (!target.id && !target.exchangeId)
       throw new OrderNotFoundError('No client id or exchange id provided.');
 
-    if (!target.ownerAddress)
-      throw new OrderNotFoundError(
-        `No owner address provided for order "${target.id} / ${target.exchangeId}".`
-      );
+    // if (!target.ownerAddress)
+    //   throw new OrderNotFoundError(
+    //     `No owner address provided for order "${target.id} / ${target.exchangeId}".`
+    //   );
 
     if (target.marketName) {
       const filledOrder = (
-        await this.getFilledOrdersForMarket(target.marketName)
+        await this.getFilledOrdersForMarket(target.marketName, limit)
       ).find(
         (order) =>
           order.id === target.id || order.exchangeId === target.exchangeId
@@ -1020,7 +1181,11 @@ export class Serum {
       return filledOrder;
     }
 
-    const mapOfFilledOrdersForMarkets = await this.getAllFilledOrders();
+    const mapOfFilledOrdersForMarkets = await this.getAllFilledOrders(
+      undefined,
+      undefined,
+      limit
+    );
 
     for (const mapOfFilledOrdersForMarket of mapOfFilledOrdersForMarkets.values()) {
       for (const filledOrder of mapOfFilledOrdersForMarket.values()) {
@@ -1044,9 +1209,11 @@ export class Serum {
    * $numberOfTargets or $numberOfTargets*$numberOfAllowedMarkets external API calls.
    *
    * @param targets
+   * @param limit
    */
   async getFilledOrders(
-    targets: GetFilledOrdersRequest[]
+    targets: GetFilledOrdersRequest[],
+    limit?: number
   ): Promise<IMap<string, Order>> {
     const orders = IMap<string, Order>().asMutable();
     const temporary = IMap<string, Order>().asMutable();
@@ -1054,7 +1221,7 @@ export class Serum {
     const getOrders = async (target: GetOrdersRequest) => {
       if (target.marketName) {
         temporary.concat(
-          await this.getFilledOrdersForMarket(target.marketName)
+          await this.getFilledOrdersForMarket(target.marketName, limit)
         );
       } else {
         (await this.getAllFilledOrders()).reduce(
@@ -1072,7 +1239,7 @@ export class Serum {
       orders.concat(
         temporary.filter((order: Order) => {
           return (
-            order.ownerAddress === target.ownerAddress &&
+            // order.ownerAddress === target.ownerAddress &&
             (target.marketName
               ? order.marketName === target.marketName
               : true) &&
@@ -1094,16 +1261,18 @@ export class Serum {
    * 1 external API calls.
    *
    * @param marketName
+   * @param limit
    */
   async getFilledOrdersForMarket(
-    marketName: string
+    marketName: string,
+    limit?: number
   ): Promise<IMap<string, Order>> {
     const market = await this.getMarket(marketName);
 
     const orders = await this.serumMarketLoadFills(
       market.market,
       this.connection,
-      0
+      limit
     );
 
     // TODO check if it's possible to get the owner address
@@ -1119,19 +1288,24 @@ export class Serum {
    * $numberOfInformedMarkets external API calls.
    *
    * @param marketNames
+   * @param limit
    */
   async getFilledOrdersForMarkets(
-    marketNames: string[]
+    marketNames: string[],
+    limit?: number
   ): Promise<IMap<string, IMap<string, Order>>> {
     const result = IMap<string, IMap<string, Order>>().asMutable();
 
     const markets = await this.getMarkets(marketNames);
 
     const getFilledOrders = async (market: Market): Promise<void> => {
-      result.set(market.name, await this.getFilledOrdersForMarket(market.name));
+      result.set(
+        market.name,
+        await this.getFilledOrdersForMarket(market.name, limit)
+      );
     };
 
-    await promiseAllInBatches<Market, Promise<void>>(
+    await promiseAllInBatches<Market, void>(
       getFilledOrders,
       Array.from(markets.values())
     );
@@ -1142,18 +1316,25 @@ export class Serum {
   /**
    * $numberOfAllowedMarkets external API calls.
    */
-  async getAllFilledOrders(): Promise<IMap<string, IMap<string, Order>>> {
-    const marketNames = Array.from((await this.getAllMarkets()).keys());
+  async getAllFilledOrders(
+    marketName?: string,
+    marketNames?: string[],
+    limit?: number
+  ): Promise<IMap<string, IMap<string, Order>>> {
+    if (marketName) marketNames = [marketName];
+    else if (!marketNames)
+      marketNames = Array.from((await this.getAllMarkets()).keys());
 
-    return await this.getFilledOrdersForMarkets(marketNames);
+    return await this.getFilledOrdersForMarkets(marketNames, limit);
   }
 
   /**
    * (1 or 2) or ($numberOfAllowedMarkets or 2*$numberOfAllowedMarkets) external API calls.
    *
    * @param target
+   * @param limit
    */
-  async getOrder(target: GetOrderRequest): Promise<Order> {
+  async getOrder(target: GetOrderRequest, limit?: number): Promise<Order> {
     if (!target.id && !target.exchangeId)
       throw new OrderNotFoundError('No client id or exchange id provided.');
 
@@ -1162,7 +1343,7 @@ export class Serum {
     } catch (exception) {
       if (exception instanceof OrderNotFoundError) {
         try {
-          return await this.getFilledOrder(target);
+          return await this.getFilledOrder(target, limit);
         } catch (exception2) {
           if (exception2 instanceof OrderNotFoundError) {
             throw new OrderNotFoundError(
@@ -1180,8 +1361,12 @@ export class Serum {
    * 2*$numberOfTargets or 2*$numberOfTargets*$numberOfAllowedMarkets external API calls.
    *
    * @param targets
+   * @param limit
    */
-  async getOrders(targets: GetOrdersRequest[]): Promise<IMap<string, Order>> {
+  async getOrders(
+    targets: GetOrdersRequest[],
+    limit?: number
+  ): Promise<IMap<string, Order>> {
     const orders = IMap<string, Order>().asMutable();
     const temporary = IMap<string, Order>().asMutable();
 
@@ -1192,7 +1377,8 @@ export class Serum {
           target.ownerAddress
         );
         const filledOrders = await this.getFilledOrdersForMarket(
-          target.marketName
+          target.marketName,
+          target.limit || limit
         );
         temporary.concat(openOrders).concat(filledOrders);
       } else {
@@ -1203,7 +1389,7 @@ export class Serum {
           temporary
         );
 
-        (await this.getAllFilledOrders()).reduce(
+        (await this.getAllFilledOrders(undefined, undefined, limit)).reduce(
           (acc: IMap<string, Order>, mapOfOrders: IMap<string, Order>) => {
             return acc.concat(mapOfOrders);
           },
@@ -1239,13 +1425,15 @@ export class Serum {
    *
    * @param marketName
    * @param ownerAddress
+   * @param limit
    */
   async getOrdersForMarket(
     marketName: string,
-    ownerAddress: string
+    ownerAddress: string,
+    limit?: number
   ): Promise<IMap<string, Order>> {
     const orders = await this.getOpenOrdersForMarket(marketName, ownerAddress);
-    orders.concat(await this.getFilledOrdersForMarket(marketName));
+    orders.concat(await this.getFilledOrdersForMarket(marketName, limit));
 
     return orders;
   }
@@ -1255,10 +1443,12 @@ export class Serum {
    *
    * @param marketNames
    * @param ownerAddress
+   * @param limit
    */
   async getOrdersForMarkets(
     marketNames: string[],
-    ownerAddress: string
+    ownerAddress: string,
+    limit?: number
   ): Promise<IMap<string, IMap<string, Order>>> {
     const result = IMap<string, IMap<string, Order>>().asMutable();
 
@@ -1267,11 +1457,11 @@ export class Serum {
     const getOrders = async (market: Market): Promise<void> => {
       result.set(
         market.name,
-        await this.getOrdersForMarket(market.name, ownerAddress)
+        await this.getOrdersForMarket(market.name, ownerAddress, limit)
       );
     };
 
-    await promiseAllInBatches<Market, Promise<void>>(
+    await promiseAllInBatches<Market, void>(
       getOrders,
       Array.from(markets.values())
     );
@@ -1283,41 +1473,55 @@ export class Serum {
    * 2*$numberOfAllMarkets external API calls.
    *
    * @param ownerAddress
+   * @param marketName
+   * @param marketNames
+   * @param limit
    */
   async getAllOrders(
-    ownerAddress: string
+    ownerAddress: string,
+    marketName?: string,
+    marketNames?: string[],
+    limit?: number
   ): Promise<IMap<string, IMap<string, Order>>> {
-    const marketNames = Array.from((await this.getAllMarkets()).keys());
+    if (marketName) marketNames = [marketName];
+    else if (!marketNames)
+      marketNames = Array.from((await this.getAllMarkets()).keys());
 
-    return await this.getOrdersForMarkets(marketNames, ownerAddress);
+    return await this.getOrdersForMarkets(marketNames, ownerAddress, limit);
   }
 
   /**
    * 1 external API call.
    *
    * @param candidate
+   * @param replaceIfExists
    */
-  async createOrder(candidate: CreateOrdersRequest): Promise<Order> {
-    return (await this.createOrders([candidate])).first();
+  async createOrder(
+    candidate: CreateOrdersRequest,
+    replaceIfExists: boolean = false
+  ): Promise<Order> {
+    return (await this.createOrders([candidate], replaceIfExists)).first();
   }
 
   /**
    * $numberOfDifferentOwners*$numberOfAllowedMarkets external API calls.
    *
    * @param candidates
+   * @param replaceIfExists
    */
   async createOrders(
-    candidates: CreateOrdersRequest[]
+    candidates: CreateOrdersRequest[],
+    replaceIfExists: boolean = false
   ): Promise<IMap<string, Order>> {
-    // TODO Check the maximum number of orders that we can create at once
-
     const ordersMap = IMap<
       Market,
       IMap<
-        Account,
+        string,
         { request: CreateOrdersRequest; serum: SerumOrderParams<Account> }[]
       >
     >().asMutable();
+
+    const ownersMap = IMap<string, Account>().asMutable();
 
     for (const candidate of candidates) {
       const market = await this.getMarket(candidate.marketName);
@@ -1325,47 +1529,47 @@ export class Serum {
       let marketMap = ordersMap.get(market);
       if (!marketMap) {
         marketMap = IMap<
-          Account,
+          string,
           { request: CreateOrdersRequest; serum: SerumOrderParams<Account> }[]
         >().asMutable();
         ordersMap.set(market, getNotNullOrThrowError(marketMap));
       }
 
       const owner = await this.getSolanaAccount(candidate.ownerAddress);
+      const ownerPublicKeyString = owner.publicKey.toString();
 
-      let ownerOrders = marketMap?.get(owner);
+      // Using a ownersMap is a workaround because the Account class does not provide good equality.
+      if (!ownersMap.has(ownerPublicKeyString)) {
+        ownersMap.set(ownerPublicKeyString, owner);
+      }
+
+      let ownerOrders = marketMap?.get(ownerPublicKeyString);
       if (!ownerOrders) {
         ownerOrders = [];
-        marketMap?.set(owner, ownerOrders);
+        marketMap?.set(ownerPublicKeyString, ownerOrders);
       }
 
       let payer: PublicKey;
       if (candidate.payerAddress) {
         payer = new PublicKey(candidate.payerAddress);
       } else {
-        if (candidate.side == OrderSide.SELL) {
-          // It's the same as the owner wallet address.
+        const tokens = candidate.marketName.split('/');
+        const baseToken = tokens[0];
+        const quoteToken = tokens[1].replace(/(.*)\s\(NEW\)/, '$1');
+        const targetToken =
+          candidate.side == OrderSide.BUY ? quoteToken : baseToken;
+        const keypair = await this.solana.getKeypair(candidate.ownerAddress);
+        const tokenInfo: TokenInfo = getNotNullOrThrowError(
+          this.solana.getTokenForSymbol(targetToken)
+        );
+        const mintAddress = new PublicKey(tokenInfo.address);
+        const account = await runWithRetryAndTimeout(
+          this.solana,
+          this.solana.getOrCreateAssociatedTokenAccount,
+          [keypair, mintAddress]
+        );
 
-          payer = new PublicKey(getNotNullOrThrowError(candidate.payerAddress));
-        } else if (candidate.side == OrderSide.BUY) {
-          // It's the token account address for the quote asset.
-
-          const quoteToken = candidate.marketName.split('/')[1];
-          const keypair = await this.solana.getKeypair(candidate.ownerAddress);
-          const tokenInfo: TokenInfo = getNotNullOrThrowError(
-            this.solana.getTokenForSymbol(quoteToken)
-          );
-          const mintAddress = new PublicKey(tokenInfo.address);
-          const account = await runWithRetryAndTimeout(
-            this.solana,
-            this.solana.getOrCreateAssociatedTokenAccount,
-            [keypair, mintAddress]
-          );
-
-          payer = getNotNullOrThrowError<TokenAccount>(account).address;
-        } else {
-          throw new Error(`Invalid order side: ${candidate.side}`);
-        }
+        payer = getNotNullOrThrowError<TokenAccount>(account).address;
       }
 
       const candidateSerumOrder: SerumOrderParams<Account> = {
@@ -1376,6 +1580,7 @@ export class Serum {
         clientId: candidate.id ? new BN(candidate.id) : getRandonBN(),
         owner: owner,
         payer: payer,
+        replaceIfExists: candidate.replaceIfExists,
       };
 
       ownerOrders.push({ request: candidate, serum: candidateSerumOrder });
@@ -1383,15 +1588,59 @@ export class Serum {
 
     const createdOrders = IMap<string, Order>().asMutable();
     for (const [market, marketMap] of ordersMap.entries()) {
-      for (const [owner, orders] of marketMap.entries()) {
+      for (const [ownerPublicKeyString, orders] of marketMap.entries()) {
+        const owner = getNotNullOrThrowError<Account>(
+          ownersMap.get(ownerPublicKeyString)
+        );
         let status: OrderStatus;
-        let signatures: TransactionSignature[];
+        let signatures: TransactionSignatures = {};
         try {
-          signatures = await this.serumMarketPlaceOrders(
-            market.market,
-            this.connection,
-            orders.map((order) => order.serum)
-          );
+          if (replaceIfExists) {
+            signatures.creation = await this.serumMarketReplaceOrders(
+              market.market,
+              this.connection,
+              {
+                owner: owner,
+                payer: orders[0].serum.payer, // The Serum method accept the same payer only
+              } as SerumOrderParamsAccounts,
+              orders.map((order) => order.serum)
+            );
+          } else if (this.config.transactions.merge.createOrders) {
+            signatures.creations = await promiseAllInBatches<
+              SerumOrderParams<Account>[],
+              TransactionSignature
+            >(
+              async (
+                item: SerumOrderParams<Account>[]
+              ): Promise<TransactionSignature> => {
+                return await this.serumMarketPlaceOrders(
+                  market.market,
+                  this.connection,
+                  owner,
+                  item,
+                  0, // constants.events.limit.matchOrders,
+                  0 // constants.events.limit.consumeEvents
+                );
+              },
+              [
+                ...splitInChunks<SerumOrderParams<Account>>(
+                  orders.map((order) => order.serum),
+                  constants.orders.create.maxPerTransaction
+                ),
+              ]
+            );
+          } else {
+            signatures.creations = [];
+            for (const order of orders) {
+              const signature = await this.serumMarketPlaceOrder(
+                market.market,
+                this.connection,
+                order.serum
+              );
+
+              signatures.creations.push(signature);
+            }
+          }
 
           status = OrderStatus.OPEN;
         } catch (exception: any) {
@@ -1400,29 +1649,43 @@ export class Serum {
               'It is unknown if it succeeded or failed.'
             )
           ) {
-            signatures = [];
+            signatures = {};
             status = OrderStatus.CREATION_PENDING;
           } else {
             throw exception;
           }
         }
 
-        for (const order of orders) {
-          createdOrders.set(
-            getNotNullOrThrowError(
-              order.serum.clientId?.toString(),
-              'Client id is not defined.'
-            ),
-            convertSerumOrderToOrder(
-              market,
-              undefined,
-              order.request,
-              order.serum,
-              owner.publicKey.toString(),
-              status,
-              signatures[0]
-            )
+        for (const [index, order] of orders.entries()) {
+          let finalSignatures: TransactionSignatures = {};
+
+          if (this.config.transactions.merge.createOrders) {
+            finalSignatures = signatures;
+          } else {
+            finalSignatures.creation = getNotNullOrThrowError<
+              TransactionSignature[]
+            >(
+              getNotNullOrThrowError<TransactionSignatures>(signatures)
+                .creations
+            )[index];
+          }
+
+          const id = getNotNullOrThrowError<string>(
+            order.serum.clientId?.toString(),
+            'Client id is not defined.'
           );
+
+          const serumOrder = convertSerumOrderToOrder(
+            market,
+            undefined,
+            order.request,
+            order.serum,
+            owner?.publicKey.toString(),
+            status,
+            finalSignatures
+          );
+
+          createdOrders.set(id, serumOrder);
         }
       }
     }
@@ -1440,17 +1703,49 @@ export class Serum {
 
     const owner = await this.getSolanaAccount(target.ownerAddress);
 
-    const order = await this.getOpenOrder({ ...target });
+    let order: Order;
 
     try {
-      order.signature = (
-        await this.serumMarketCancelOrdersAndSettleFunds(
-          market.market,
-          this.connection,
-          owner,
-          [getNotNullOrThrowError(order.order)]
-        )
-      ).cancellation;
+      order = await this.getOpenOrder({ ...target });
+    } catch (exception: any) {
+      if (exception instanceof OrderNotFoundError) {
+        order = target as Order;
+        order.status = OrderStatus.CANCELED;
+
+        return order;
+      }
+
+      throw exception;
+    }
+
+    try {
+      // order.signature = (
+      //   await this.serumMarketCancelOrdersAndSettleFunds(
+      //     market.market,
+      //     this.connection,
+      //     owner,
+      //     [getNotNullOrThrowError(order.order)]
+      //   )
+      // ).cancellation;
+
+      const cancellationSignature = await this.serumMarketCancelOrder(
+        market.market,
+        this.connection,
+        owner,
+        getNotNullOrThrowError<SerumOrder>(order.order)
+      );
+
+      const fundsSettlementSignatures = await this.settleFundsForMarket(
+        target.marketName,
+        target.ownerAddress
+      );
+
+      order.signatures = {
+        cancellation: cancellationSignature,
+        fundsSettlements: getNotNullOrThrowError<TransactionSignature[]>(
+          fundsSettlementSignatures
+        ),
+      };
 
       order.status = OrderStatus.CANCELED;
 
@@ -1476,7 +1771,9 @@ export class Serum {
   async cancelOrders(
     targets: CancelOrdersRequest[]
   ): Promise<IMap<string, Order>> {
-    const ordersMap = IMap<Market, IMap<Account, Order[]>>().asMutable();
+    const ordersMap = IMap<Market, IMap<string, Order[]>>().asMutable();
+
+    const ownersMap = IMap<string, Account>().asMutable();
 
     for (const target of targets) {
       const market = await this.getMarket(target.marketName);
@@ -1486,16 +1783,22 @@ export class Serum {
 
       let marketMap = ordersMap.get(market);
       if (!marketMap) {
-        marketMap = IMap<Account, Order[]>().asMutable();
+        marketMap = IMap<string, Order[]>().asMutable();
         ordersMap.set(market, getNotNullOrThrowError(marketMap));
       }
 
       const owner = await this.getSolanaAccount(target.ownerAddress);
+      const ownerPublicKeyString = owner.publicKey.toString();
 
-      let ownerOrders = marketMap?.get(owner);
+      // Using a ownersMap is a workaround because the Account class does not provide good equality.
+      if (!ownersMap.has(ownerPublicKeyString)) {
+        ownersMap.set(ownerPublicKeyString, owner);
+      }
+
+      let ownerOrders = marketMap?.get(ownerPublicKeyString);
       if (!ownerOrders) {
         ownerOrders = [];
-        marketMap?.set(owner, ownerOrders);
+        marketMap?.set(ownerPublicKeyString, ownerOrders);
       }
 
       ownerOrders.push(...openOrders.values());
@@ -1503,7 +1806,11 @@ export class Serum {
 
     const canceledOrders = IMap<string, Order>().asMutable();
     for (const [market, marketMap] of ordersMap.entries()) {
-      for (const [owner, orders] of marketMap.entries()) {
+      for (const [ownerPublicKeyString, orders] of marketMap.entries()) {
+        const owner = getNotNullOrThrowError<Account>(
+          ownersMap.get(ownerPublicKeyString)
+        );
+
         const serumOrders = orders.map((order) =>
           getNotNullOrThrowError(order.order)
         ) as SerumOrder[];
@@ -1511,16 +1818,79 @@ export class Serum {
         if (!serumOrders.length) continue;
 
         let status: OrderStatus;
-        let signature: TransactionSignature;
+        let signatures: TransactionSignatures = {};
         try {
-          signature = (
-            await this.serumMarketCancelOrdersAndSettleFunds(
-              market.market,
-              this.connection,
-              owner,
-              serumOrders
-            )
-          ).cancellation;
+          if (this.config.transactions.merge.cancelOrders) {
+            const allSignatures = await promiseAllInBatches<
+              SerumOrder[],
+              TransactionSignatures
+            >(
+              async (item: SerumOrder[]): Promise<TransactionSignatures> => {
+                return await this.serumMarketCancelOrders(
+                  market.market,
+                  this.connection,
+                  owner,
+                  item
+                );
+              },
+              [
+                ...splitInChunks<SerumOrder>(
+                  serumOrders,
+                  constants.orders.cancel.maxPerTransaction
+                ),
+              ]
+            );
+
+            signatures.cancellations = getNotNullOrThrowError(
+              allSignatures.map((item) => item.cancellation)
+            );
+
+            // signatures.fundsSettlements = await this.settleFundsForMarket(
+            //   market.name,
+            //   owner.publicKey.toString()
+            // );
+
+            // signatures = {
+            //   cancellation:
+            //     cancelationAndFundsSettlementSignatures.cancellation,
+            //   fundsSettlements:
+            //     cancelationAndFundsSettlementSignatures.fundsSettlements,
+            // };
+
+            // const cancelationAndFundsSettlementSignatures =
+            //   await this.serumMarketCancelOrdersAndSettleFunds(
+            //     market.market,
+            //     this.connection,
+            //     owner,
+            //     serumOrders
+            //   );
+            //
+            // signatures = {
+            //   cancellation:
+            //     cancelationAndFundsSettlementSignatures.cancellation,
+            //   fundsSettlements:
+            //     cancelationAndFundsSettlementSignatures.fundsSettlements,
+            // };
+          } else {
+            signatures.cancellations = [];
+            for (const order of orders) {
+              const cancellationSignature = await this.serumMarketCancelOrder(
+                market.market,
+                this.connection,
+                owner,
+                getNotNullOrThrowError<SerumOrder>(order.order)
+              );
+
+              order.signatures = {
+                cancellation: cancellationSignature,
+              };
+            }
+
+            signatures.fundsSettlements = await this.settleFundsForMarket(
+              market.name,
+              ownerPublicKeyString
+            );
+          }
 
           status = OrderStatus.CANCELED;
         } catch (exception: any) {
@@ -1529,7 +1899,7 @@ export class Serum {
               'It is unknown if it succeeded or failed.'
             )
           ) {
-            signature = '';
+            signatures = {};
             status = OrderStatus.CANCELATION_PENDING;
           } else {
             throw exception;
@@ -1539,11 +1909,18 @@ export class Serum {
         if (orders.length) {
           for (const order of orders) {
             order.status = status;
-            order.signature = signature;
+            if (this.config.transactions.merge.cancelOrders) {
+              order.signatures = signatures;
+            } else {
+              getNotNullOrThrowError<TransactionSignatures>(
+                order.signatures
+              ).fundsSettlements = signatures.fundsSettlements;
+            }
+
             canceledOrders.set(
               getNotNullOrThrowError(
-                order.order?.clientId?.toString(),
-                'Client id is not defined.'
+                order.order?.orderId.toString(),
+                'Exchange id is not defined.'
               ),
               order
             );
@@ -1559,9 +1936,17 @@ export class Serum {
    * $numberOfOpenOrders external API calls.
    *
    * @param ownerAddress
+   * @param marketName
+   * @param marketNames
    */
-  async cancelAllOrders(ownerAddress: string): Promise<IMap<string, Order>> {
-    const marketNames = Array.from((await this.getAllMarkets()).keys());
+  async cancelAllOrders(
+    ownerAddress: string,
+    marketName?: string,
+    marketNames?: string[]
+  ): Promise<IMap<string, Order>> {
+    if (marketName) marketNames = [marketName];
+    else if (!marketNames)
+      marketNames = Array.from((await this.getAllMarkets()).keys());
 
     const requests: CancelOrdersRequest[] = marketNames.map((marketName) => ({
       marketName,
@@ -1627,7 +2012,9 @@ export class Serum {
               openOrders,
               baseWallet,
               quoteWallet,
-              null
+              null,
+              constants.events.limit.matchOrders,
+              constants.events.limit.consumeEvents
             )
           );
         } catch (exception: any) {
