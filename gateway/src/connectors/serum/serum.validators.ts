@@ -194,7 +194,7 @@ export const validateOrderExchangeIds: Validator = createValidator(
       : values.map((item: any) => (ok = isNaturalNumberString(item) && ok));
     return ok;
   },
-  `Invalid client ids, it needs to be an array of big numbers.`,
+  `Invalid exchange ids, it needs to be an array of big numbers.`,
   true
 );
 
@@ -549,7 +549,7 @@ export const validateGetFilledOrderRequest: RequestValidator =
         false
       ),
       // validateOrderMarketName,
-      validateOrderOwnerAddress,
+      // validateOrderOwnerAddress,
     ],
     StatusCodes.BAD_REQUEST,
     (request) => `Error when trying to get filled order "${request.id}"`
@@ -580,7 +580,7 @@ export const validateGetFilledOrdersRequest: RequestValidator =
             false
           ),
           // validateOrderMarketName,
-          validateOrderOwnerAddress,
+          // validateOrderOwnerAddress,
         ],
         (_, index) => `Invalid get filled orders request at position ${index}:`
       ),
