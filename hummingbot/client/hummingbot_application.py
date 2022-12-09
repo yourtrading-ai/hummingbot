@@ -6,6 +6,10 @@ import time
 from collections import deque
 from typing import Deque, Dict, List, Optional, Tuple, Union
 
+from hummingbot.connector.exchange_base import ExchangeBase
+from hummingbot.core.clock import Clock
+from hummingbot.strategy.strategy_base import StrategyBase
+
 from hummingbot.client.command import __all__ as commands
 from hummingbot.client.config.client_config_map import ClientConfigMap
 from hummingbot.client.config.config_helpers import (
@@ -28,9 +32,7 @@ from hummingbot.client.ui.hummingbot_cli import HummingbotCLI
 from hummingbot.client.ui.keybindings import load_key_bindings
 from hummingbot.client.ui.parser import ThrowingArgumentParser, load_parser
 from hummingbot.connector.exchange.paper_trade import create_paper_trade_market
-from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.markets_recorder import MarketsRecorder
-from hummingbot.core.clock import Clock
 from hummingbot.core.gateway.gateway_status_monitor import GatewayStatusMonitor
 from hummingbot.core.utils.kill_switch import KillSwitch
 from hummingbot.core.utils.trading_pair_fetcher import TradingPairFetcher
@@ -42,7 +44,6 @@ from hummingbot.model.sql_connection_manager import SQLConnectionManager
 from hummingbot.notifier.notifier_base import NotifierBase
 from hummingbot.strategy.maker_taker_market_pair import MakerTakerMarketPair
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
-from hummingbot.strategy.strategy_base import StrategyBase
 
 s_logger = None
 
@@ -226,8 +227,10 @@ class HummingbotApplication(*commands):
                         del kwargs["func"]
                         f(**kwargs)
         except ArgumentParserError as e:
-            if not self.be_silly(raw_command):
+            if not self.handle_script_command(raw_command):
                 self.notify(str(e))
+            # if not self.be_silly(raw_command):
+            #     self.notify(str(e))
         except NotImplementedError:
             self.notify("Command not yet implemented. This feature is currently under development.")
         except Exception as e:
