@@ -104,6 +104,10 @@ settle funds for markets [SOL/USDT, SOL/USDC]
 settle all funds (SOL/USDT, SOL/USDC, SRM/SOL)
 */
 
+const ownerPublicKey =
+  process.env['TEST_SOLANA_WALLET_PUBLIC_KEY'] ||
+  config.solana.wallet.owner.publicKey;
+
 const commonParameters = {
   chain: config.serum.chain,
   network: config.serum.network,
@@ -466,7 +470,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -488,7 +492,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -589,7 +593,7 @@ it('getOpenOrder [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
   response = await getOpenOrders(solana, serum, request);
@@ -602,7 +606,7 @@ it('getOpenOrder [0]', async () => {
   expect(openOrder.id).toBe(orderIds[0]);
   // expect(openOrder.exchangeId).toBeDefined();
   expect(targetMarkets).toContain(openOrder.marketName);
-  expect(openOrder.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+  expect(openOrder.ownerAddress).toBe(ownerPublicKey);
   expect(openOrder.price).toBeGreaterThan(0);
   expect(openOrder.amount).toBeGreaterThan(0);
   expect(Object.keys(OrderSide)).toContain(openOrder.side);
@@ -620,7 +624,7 @@ it('getOrder [1]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[1],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
   response = await getOrders(solana, serum, request);
@@ -633,7 +637,7 @@ it('getOrder [1]', async () => {
   expect(openOrder.id).toBe(orderIds[1]);
   // expect(openOrder.exchangeId).toBeDefined();
   expect(targetMarkets).toContain(openOrder.marketName);
-  expect(openOrder.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+  expect(openOrder.ownerAddress).toBe(ownerPublicKey);
   expect(openOrder.price).toBeGreaterThan(0);
   expect(openOrder.amount).toBeGreaterThan(0);
   expect(Object.keys(OrderSide)).toContain(openOrder.side);
@@ -653,7 +657,7 @@ it('getOpenOrders [2, 3]', async () => {
     orders: [
       {
         ids: orderIds.slice(2, 4),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -673,7 +677,7 @@ it('getOpenOrders [2, 3]', async () => {
     expect(request.orders[0].ids).toContain(openOrder.id);
     expect(openOrder.id).toBe(id);
     expect(targetMarkets).toContain(openOrder.marketName);
-    expect(openOrder.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+    expect(openOrder.ownerAddress).toBe(ownerPublicKey);
     expect(openOrder.price).toBeGreaterThan(0);
     expect(openOrder.amount).toBeGreaterThan(0);
     expect(Object.keys(OrderSide)).toContain(openOrder.side);
@@ -695,7 +699,7 @@ it('getOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -715,7 +719,7 @@ it('getOrders [4, 5]', async () => {
     expect(request.orders[0].ids).toContain(order.id);
     expect(order.id).toBe(id);
     expect(targetMarkets).toContain(order.marketName);
-    expect(order.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+    expect(order.ownerAddress).toBe(ownerPublicKey);
     expect(order.price).toBeGreaterThan(0);
     expect(order.amount).toBeGreaterThan(0);
     expect(order.side).toBeOneOf(Object.keys(OrderSide));
@@ -733,7 +737,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -761,7 +765,7 @@ it('getOpenOrders (all)', async () => {
       expect(openOrder.exchangeId).toBeDefined();
       expect(openOrder.marketName).toBe(marketName);
       expect(targetMarkets).toContain(openOrder.marketName);
-      expect(openOrder.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+      expect(openOrder.ownerAddress).toBe(ownerPublicKey);
       expect(openOrder.price).toBeGreaterThan(0);
       expect(openOrder.amount).toBeGreaterThan(0);
       expect(Object.keys(OrderSide)).toContain(openOrder.side);
@@ -781,7 +785,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -807,7 +811,7 @@ it('getOrders (all)', async () => {
       expect(order.exchangeId).toBeDefined();
       expect(order.marketName).toBe(marketName);
       expect(targetMarkets).toContain(order.marketName);
-      expect(order.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+      expect(order.ownerAddress).toBe(ownerPublicKey);
       expect(order.price).toBeGreaterThan(0);
       expect(order.amount).toBeGreaterThan(0);
       expect(order.side).toBeOneOf(Object.keys(OrderSide));
@@ -827,7 +831,7 @@ it('cancelOrders [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
       marketName: marketName,
     },
   };
@@ -864,7 +868,7 @@ it('getOpenOrders [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
 
@@ -887,7 +891,7 @@ it('getFilledOrders [1]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[1],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
 
@@ -911,7 +915,7 @@ it('getFilledOrders [2, 3]', async () => {
     orders: [
       {
         ids: orderIds.slice(2, 4),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -930,7 +934,7 @@ it('getFilledOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getFilledOrders(solana, serum, request);
 
@@ -966,7 +970,7 @@ it('cancelOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
         marketName: marketName,
       },
     ],
@@ -987,9 +991,7 @@ it('cancelOrders [4, 5]', async () => {
     expect(canceledOrder.id).toBe(id);
     expect(canceledOrder.exchangeId).toBeDefined();
     expect(targetMarkets).toContain(canceledOrder.marketName);
-    expect(canceledOrder.ownerAddress).toBe(
-      config.solana.wallet.owner.publicKey
-    );
+    expect(canceledOrder.ownerAddress).toBe(ownerPublicKey);
     expect(canceledOrder.price).toBeGreaterThan(0);
     expect(canceledOrder.amount).toBeGreaterThan(0);
     expect(Object.keys(OrderSide)).toContain(canceledOrder.side);
@@ -1011,7 +1013,7 @@ it('getOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -1027,7 +1029,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -1046,9 +1048,7 @@ it('cancelOrders (all)', async () => {
     expect(canceledOrder.id).toBe(id);
     expect(canceledOrder.exchangeId).toBeDefined();
     expect(targetMarkets).toContain(canceledOrder.marketName);
-    expect(canceledOrder.ownerAddress).toBe(
-      config.solana.wallet.owner.publicKey
-    );
+    expect(canceledOrder.ownerAddress).toBe(ownerPublicKey);
     expect(canceledOrder.price).toBeGreaterThan(0);
     expect(canceledOrder.amount).toBeGreaterThan(0);
     expect(Object.keys(OrderSide)).toContain(canceledOrder.side);
@@ -1066,7 +1066,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1100,7 +1100,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1174,7 +1174,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1202,7 +1202,7 @@ it('getOpenOrders (all)', async () => {
       expect(openOrder.exchangeId).toBeDefined();
       expect(openOrder.marketName).toBe(marketName);
       expect(targetMarkets).toContain(openOrder.marketName);
-      expect(openOrder.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+      expect(openOrder.ownerAddress).toBe(ownerPublicKey);
       expect(openOrder.price).toBeGreaterThan(0);
       expect(openOrder.amount).toBeGreaterThan(0);
       expect(Object.keys(OrderSide)).toContain(openOrder.side);
@@ -1222,7 +1222,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1248,7 +1248,7 @@ it('getOrders (all)', async () => {
       expect(order.exchangeId).toBeDefined();
       expect(order.marketName).toBe(marketName);
       expect(targetMarkets).toContain(order.marketName);
-      expect(order.ownerAddress).toBe(config.solana.wallet.owner.publicKey);
+      expect(order.ownerAddress).toBe(ownerPublicKey);
       expect(order.price).toBeGreaterThan(0);
       expect(order.amount).toBeGreaterThan(0);
       expect(Object.keys(OrderSide)).toContain(order.side);
@@ -1265,7 +1265,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -1284,9 +1284,7 @@ it('cancelOrders (all)', async () => {
     expect(canceledOrder.id).toBe(id);
     expect(canceledOrder.exchangeId).toBeDefined();
     expect(targetMarkets).toContain(canceledOrder.marketName);
-    expect(canceledOrder.ownerAddress).toBe(
-      config.solana.wallet.owner.publicKey
-    );
+    expect(canceledOrder.ownerAddress).toBe(ownerPublicKey);
     expect(canceledOrder.price).toBeGreaterThan(0);
     expect(canceledOrder.amount).toBeGreaterThan(0);
     expect(Object.keys(OrderSide)).toContain(canceledOrder.side);
@@ -1304,7 +1302,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1338,7 +1336,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1372,7 +1370,7 @@ it('settleFunds ["SOL/USDT"]', async () => {
   request = {
     ...commonParameters,
     marketName: marketName,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
@@ -1391,7 +1389,7 @@ it('settleFunds ["SOL/USDT", "SOL/USDC"]', async () => {
   request = {
     ...commonParameters,
     marketNames: targetMarkets,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
@@ -1409,7 +1407,7 @@ it('settleFunds (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
