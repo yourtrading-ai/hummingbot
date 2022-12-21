@@ -178,6 +178,8 @@ class CLOBPMMExample(ScriptStrategyBase):
             self.initialized = True
         except Exception as exception:
             self._handle_error(exception)
+
+            HummingbotApplication.main_application().stop()
         finally:
             self._log(DEBUG, """_initialize... end""")
 
@@ -195,8 +197,8 @@ class CLOBPMMExample(ScriptStrategyBase):
 
             try:
                 await self._settle_funds()
-            except (Exception,):
-                pass
+            except Exception as exception:
+                self._handle_error(exception)
 
             await self._get_open_orders(use_cache=False)
             await self._get_filled_orders(use_cache=False)
@@ -204,8 +206,8 @@ class CLOBPMMExample(ScriptStrategyBase):
 
             try:
                 await self._cancel_duplicated_orders()
-            except (Exception,):
-                pass
+            except Exception as exception:
+                self._handle_error(exception)
 
             proposal: List[OrderCandidate] = await self._create_proposal()
             candidate_orders: List[OrderCandidate] = await self._adjust_proposal_to_budget(proposal)
@@ -214,8 +216,8 @@ class CLOBPMMExample(ScriptStrategyBase):
 
             try:
                 await self._cancel_remaining_orders(candidate_orders, replaced_orders)
-            except (Exception,):
-                pass
+            except Exception as exception:
+                self._handle_error(exception)
         except Exception as exception:
             self._handle_error(exception)
         finally:
@@ -259,7 +261,9 @@ class CLOBPMMExample(ScriptStrategyBase):
             ticker_price = await self._get_market_price()
             try:
                 last_filled_order_price = await self._get_last_filled_order_price()
-            except (Exception,):
+            except Exception as exception:
+                self._handle_error(exception)
+
                 last_filled_order_price = self._decimal_zero
 
             price_strategy = self._configuration["strategy"]["price_strategy"]
@@ -1028,12 +1032,8 @@ class CLOBPMMExample(ScriptStrategyBase):
         self.logger().log(level, message, *args, **kwargs)
 
     def _handle_error(self, exception: Exception):
-        try:
-            message = f"""ERROR: {type(exception).__name__} {str(exception)}"""
-
-            self._log(ERROR, message, True)
-        finally:
-            raise exception
+        message = f"""ERROR: {type(exception).__name__} {str(exception)}"""
+        self._log(ERROR, message, True)
 
     @staticmethod
     def _dump(target: Any):
