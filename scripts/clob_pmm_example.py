@@ -62,7 +62,7 @@ class CLOBPMMExample(ScriptStrategyBase):
                     "layers": [
                         {
                             "bid": {
-                                "quantity": 1,
+                                "quantity": 0,
                                 "spread_percentage": 1,
                                 "max_liquidity_in_dollars": 5
                             },
@@ -74,7 +74,7 @@ class CLOBPMMExample(ScriptStrategyBase):
                         },
                         {
                             "bid": {
-                                "quantity": 1,
+                                "quantity": 0,
                                 "spread_percentage": 5,
                                 "max_liquidity_in_dollars": 5
                             },
@@ -86,7 +86,7 @@ class CLOBPMMExample(ScriptStrategyBase):
                         },
                         {
                             "bid": {
-                                "quantity": 1,
+                                "quantity": 0,
                                 "spread_percentage": 10,
                                 "max_liquidity_in_dollars": 5
                             },
@@ -101,8 +101,8 @@ class CLOBPMMExample(ScriptStrategyBase):
                     "serum_order_type": "LIMIT",
                     "price_strategy": "middle",
                     "middle_price_strategy": "VWAP",
-                    "cancel_all_orders_on_start": False,
-                    "cancel_all_orders_on_stop": False,
+                    "cancel_all_orders_on_start": True,
+                    "cancel_all_orders_on_stop": True,
                     "run_only_once": False
                 },
                 "logger": {
