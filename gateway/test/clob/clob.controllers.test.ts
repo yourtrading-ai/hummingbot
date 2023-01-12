@@ -61,7 +61,7 @@ beforeAll(async () => {
 
   patches = await patchesCreator(solana, serum);
 
-  patches.get('solana/loadTokens')();
+  patches.get('solana/getTokenList')();
 
   patches.get('serum/serumGetMarketsInformation')();
   patches.get('serum/market/load')();
