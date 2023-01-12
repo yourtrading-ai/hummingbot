@@ -23,6 +23,7 @@ import { patch } from '../../../../../services/patch';
 import config from '../config';
 import { convertToSerumOpenOrders, getNewSerumOrders } from '../helpers';
 import data from './data';
+import {TokenInfo} from "@solana/spl-token-registry"
 
 let usePatches = true;
 
@@ -36,11 +37,11 @@ export const disablePatches = () => (usePatches = false);
 const patches = (solana: Solana, serum: Serum) => {
   const patches = new Map();
 
-  patches.set('solana/loadTokens', () => {
+  patches.set('solana/getTokenList', () => {
     if (!usePatches) return;
 
-    patch(solana, 'loadTokens', () => {
-      return {};
+    patch(solana, 'getTokenList', () => {
+      return data.get('solana/getTokenList')['tokens'] as TokenInfo[];
     });
   });
 

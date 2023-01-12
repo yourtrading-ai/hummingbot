@@ -19,6 +19,141 @@ for (const node of slab.nodes) {
   if (node.innerNode) node.innerNode.key = new BN('31219269670346045155772'); // noqa: mock
 }
 
+// Tokens information
+data.set('solana/getTokenList', {
+  name: 'Solana Token List',
+  logoURI:
+    'https://cdn.jsdelivr.net/gh/trustwallet/assets@master/blockchains/solana/info/logo.png',
+  keywords: ['solana', 'spl'],
+  tags: {
+    stablecoin: {
+      name: 'stablecoin',
+      description:
+        'Tokens that are fixed to an external asset, e.g. the US dollar',
+    },
+    ethereum: {
+      name: 'ethereum',
+      description: 'Asset bridged from ethereum',
+    },
+    'lp-token': {
+      name: 'lp-token',
+      description: 'Asset representing liquidity provider token',
+    },
+    'wrapped-sollet': {
+      name: 'wrapped-sollet',
+      description: 'Asset wrapped using sollet bridge',
+    },
+    wrapped: {
+      name: 'wrapped',
+      description: 'Asset wrapped using wormhole bridge',
+    },
+    leveraged: {
+      name: 'leveraged',
+      description: 'Leveraged asset',
+    },
+    bull: {
+      name: 'bull',
+      description: 'Leveraged Bull asset',
+    },
+    bear: {
+      name: 'bear',
+      description: 'Leveraged Bear asset',
+    },
+    nft: {
+      name: 'nft',
+      description: 'Non-fungible token',
+    },
+    'security-token': {
+      name: 'security-token',
+      description:
+        'Tokens that are used to gain access to an electronically restricted resource',
+    },
+    'utility-token': {
+      name: 'utility-token',
+      description:
+        'Tokens that are designed to be spent within a certain blockchain ecosystem e.g. most of the SPL-Tokens',
+    },
+    'tokenized-stock': {
+      name: 'tokenized-stock',
+      description:
+        'Tokenized stocks are tokenized derivatives that represent traditional securities, particularly shares in publicly firms traded on regulated exchanges',
+    },
+  },
+  timestamp: '2021-03-03T19:57:21+0000',
+  tokens: [
+    {
+      chainId: 101,
+      address: 'So11111111111111111111111111111111111111112',
+      symbol: 'SOL',
+      name: 'Wrapped SOL',
+      decimals: 9,
+      logoURI:
+        'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+      extensions: {
+        coingeckoId: 'solana',
+        serumV3Usdc: '9wFFyRfZBsuAha4YcuxcXLKwMxJR43S7fPfQLusDBzvT',
+        serumV3Usdt: 'HWHvQhFmJB3NUcu1aihKmrKegfVxBEHzwVX6yZCKEsi1',
+        website: 'https://solana.com/',
+      },
+    },
+    {
+      chainId: 101,
+      address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      symbol: 'USDC',
+      name: 'USD Coin',
+      decimals: 6,
+      logoURI:
+        'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png',
+      tags: ['stablecoin'],
+      extensions: {
+        coingeckoId: 'usd-coin',
+        serumV3Usdt: '77quYg4MGneUdjgXCunt9GgM1usmrxKY31twEy3WHwcS',
+        website: 'https://www.centre.io/',
+      },
+    },
+    {
+      chainId: 101,
+      address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      symbol: 'USDT',
+      name: 'USDT',
+      decimals: 6,
+      logoURI:
+        'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg',
+      tags: ['stablecoin'],
+      extensions: {
+        coingeckoId: 'tether',
+        serumV3Usdc: '77quYg4MGneUdjgXCunt9GgM1usmrxKY31twEy3WHwcS',
+        website: 'https://tether.to/',
+      },
+    },
+    {
+      chainId: 101,
+      address: '9AaKcdu5eymQwR19qwYFsqiqcXgL3iAxMQyshRpbqg6z',
+      symbol: 'SRM',
+      name: 'SRM token coin',
+      decimals: 0,
+      logoURI:
+        'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/9AaKcdu5eymQwR19qwYFsqiqcXgL3iAxMQyshRpbqg6z/logo.png',
+      tags: ['utility-token'],
+    },
+    {
+      chainId: 101,
+      address: '8duXAgN6AYMi1jVAoQaBRnF9YKtLfRSC2h8kdquUQtcE',
+      symbol: 'DUMMY',
+      name: 'DUMMY',
+      decimals: 9,
+      logoURI:
+        'https://xo3jbgawennyb4txdr4lp5z4ipmmrafz6ba6bntz6tsqlcgpgrlq.arweave.net/u7aQmBYjW4Dydxx4t_c8Q9jIgLnwQeC2efTlBYjPNFc',
+      tags: ['test-token'],
+    },
+  ],
+  version: {
+    major: 0,
+    minor: 3,
+    patch: 3,
+  },
+});
+
 // Markets information
 data.set('serum/serumGetMarketsInformation', [
   {

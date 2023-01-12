@@ -18,6 +18,8 @@ markets:
   url: ./markets.json
   whitelist:
     - SOL/USDC
+    - SOL/USDT
+    - SRM/SOL
     - ETH/USDC
     - USDT/USDC
     - mSOL/USDC
