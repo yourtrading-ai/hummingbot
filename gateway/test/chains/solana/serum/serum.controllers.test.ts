@@ -104,6 +104,8 @@ settle funds for markets [SOL/USDT, SOL/USDC]
 settle all funds (SOL/USDT, SOL/USDC, SRM/SOL)
 */
 
+const ownerPublicKey = config.solana.wallet.owner.publicKey;
+
 const commonParameters = {
   chain: config.serum.chain,
   network: config.serum.network,
@@ -469,7 +471,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -491,7 +493,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -594,7 +596,7 @@ it('getOpenOrder [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
   response = await getOpenOrders(solana, serum, request);
@@ -625,7 +627,7 @@ it('getOrder [1]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[1],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
   response = await getOrders(solana, serum, request);
@@ -658,7 +660,7 @@ it('getOpenOrders [2, 3]', async () => {
     orders: [
       {
         ids: orderIds.slice(2, 4),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -701,7 +703,7 @@ it('getOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -740,7 +742,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -788,7 +790,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -835,7 +837,7 @@ it('cancelOrders [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
       marketName: marketName,
     },
   };
@@ -872,7 +874,7 @@ it('getOpenOrders [0]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[0],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
 
@@ -895,7 +897,7 @@ it('getFilledOrders [1]', async () => {
     ...commonParameters,
     order: {
       id: orderIds[1],
-      ownerAddress: config.solana.wallet.owner.publicKey,
+      ownerAddress: ownerPublicKey,
     },
   };
 
@@ -919,7 +921,7 @@ it('getFilledOrders [2, 3]', async () => {
     orders: [
       {
         ids: orderIds.slice(2, 4),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -938,7 +940,7 @@ it('getFilledOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getFilledOrders(solana, serum, request);
 
@@ -974,7 +976,7 @@ it('cancelOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
         marketName: marketName,
       },
     ],
@@ -1019,7 +1021,7 @@ it('getOrders [4, 5]', async () => {
     orders: [
       {
         ids: orderIds.slice(4, 6),
-        ownerAddress: config.solana.wallet.owner.publicKey,
+        ownerAddress: ownerPublicKey,
       },
     ],
   };
@@ -1042,7 +1044,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -1081,7 +1083,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1115,7 +1117,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1190,7 +1192,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1238,7 +1240,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1285,7 +1287,7 @@ it('cancelOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await cancelOrders(solana, serum, request);
 
@@ -1324,7 +1326,7 @@ it('getOpenOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOpenOrders(solana, serum, request);
 
@@ -1358,7 +1360,7 @@ it('getOrders (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await getOrders(solana, serum, request);
 
@@ -1392,7 +1394,7 @@ it('settleFunds ["SOL/USDT"]', async () => {
   request = {
     ...commonParameters,
     marketName: marketName,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
@@ -1411,7 +1413,7 @@ it('settleFunds ["SOL/USDT", "SOL/USDC"]', async () => {
   request = {
     ...commonParameters,
     marketNames: targetMarkets,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
@@ -1429,7 +1431,7 @@ it('settleFunds (all)', async () => {
 
   request = {
     ...commonParameters,
-    ownerAddress: config.solana.wallet.owner.publicKey,
+    ownerAddress: ownerPublicKey,
   };
   response = await settleFunds(solana, serum, request);
 
