@@ -12,7 +12,6 @@ import { getNotNullOrThrowError } from '../../src/connectors/serum/serum.helpers
 import {
   CancelOrderResponse,
   GetMarketResponse,
-  GetOpenOrderResponse,
   GetOrderBookResponse,
   GetOrderResponse,
   GetTickerResponse,
@@ -1063,14 +1062,14 @@ describe(`/clob/orders`, () => {
               Object.entries(response.body)
             );
 
-            for (const [orderId, order] of orders) {
+            for (const [exchangeId, order] of orders) {
               const found = targets.find(
-                (item) => item.response.id === orderId
+                (item) => item.response.exchangeId === exchangeId
               );
 
               expect(found).not.toBeUndefined();
-              expect(order.id).toEqual(orderId);
               expect(order.exchangeId).toBeDefined();
+              expect(order.exchangeId).toEqual(exchangeId);
               expect(order.marketName).toEqual(found?.response.marketName);
               expect(order.ownerAddress).toEqual(found?.response.ownerAddress);
               expect(order.price).toEqual(found?.response.price);
@@ -1103,14 +1102,14 @@ describe(`/clob/orders`, () => {
               Object.entries(response.body)
             );
 
-            for (const [orderId, order] of orders) {
+            for (const [exchangeId, order] of orders) {
               const found = targets.find(
-                (item) => item.response.id === orderId
+                (item) => item.response.exchangeId === exchangeId
               );
 
               expect(found).not.toBeUndefined();
-              expect(order.id).toEqual(orderId);
               expect(order.exchangeId).toBeDefined();
+              expect(order.exchangeId).toEqual(exchangeId);
               expect(order.marketName).toEqual(found?.response.marketName);
               expect(order.ownerAddress).toEqual(found?.response.ownerAddress);
               expect(order.price).toEqual(found?.response.price);
@@ -1144,14 +1143,14 @@ describe(`/clob/orders`, () => {
               Object.entries(response.body)
             );
 
-            for (const [orderId, order] of orders) {
+            for (const [exchangeId, order] of orders) {
               const found = targets.find(
-                (item) => item.response.id === orderId
+                (item) => item.response.exchangeId === exchangeId
               );
 
               expect(found).not.toBeUndefined();
-              expect(order.id).toEqual(orderId);
               expect(order.exchangeId).toBeDefined();
+              expect(order.exchangeId).toEqual(exchangeId);
               expect(order.marketName).toEqual(found?.response.marketName);
               expect(order.ownerAddress).toEqual(found?.response.ownerAddress);
               expect(order.price).toEqual(found?.response.price);
@@ -1184,14 +1183,14 @@ describe(`/clob/orders`, () => {
               Object.entries(response.body)
             );
 
-            for (const [orderId, order] of orders) {
+            for (const [exchangeId, order] of orders) {
               const found = targets.find(
-                (item) => item.response.id === orderId
+                (item) => item.response.exchangeId === exchangeId
               );
 
               expect(found).not.toBeUndefined();
-              expect(order.id).toEqual(orderId);
               expect(order.exchangeId).toBeDefined();
+              expect(order.exchangeId).toEqual(exchangeId);
               expect(order.marketName).toEqual(found?.response.marketName);
               expect(order.ownerAddress).toEqual(found?.response.ownerAddress);
               expect(order.price).toEqual(found?.response.price);
@@ -1242,11 +1241,11 @@ describe(`/clob/orders`, () => {
     });
   });
 
-  describe(`POST /serum/orders`, () => {
+  describe(`POST /clob/orders`, () => {
     describe('Single order', () => {
       it('Create an order and receive a response with the new information', async () => {
+        patches.get('solana/getOrCreateAssociatedTokenAccount')();
         patches.get('solana/getKeyPair')();
-
         patches.get('serum/serumMarketPlaceOrders')();
         await patches.get('serum/market/loadOrdersForOwner')([
           orderPairs[0].response,
@@ -1318,7 +1317,8 @@ describe(`/clob/orders`, () => {
       it('Cancel a specific order by its id, owner address and market name', async () => {
         await patches.get('serum/market/asksBidsForAllMarkets')();
         patches.get('solana/getKeyPair')();
-        patches.get('serum/serumMarketCancelOrdersAndSettleFunds')();
+        patches.get('serum/serumMarketCancelOrder')();
+        patches.get('serum/settleFundsForMarket')();
         await patches.get('serum/market/loadOrdersForOwner')([target.request]);
 
         const orderId = target.response.id;
@@ -1449,7 +1449,7 @@ describe(`/clob/orders/open`, () => {
           .set('Accept', 'application/json')
           .expect(StatusCodes.OK)
           .then((response) => {
-            const order = response.body as GetOpenOrderResponse;
+            const order = response.body as GetOrderResponse;
 
             expect(order).toBeDefined();
           });
