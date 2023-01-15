@@ -1008,7 +1008,7 @@ class GatewayHttpClient:
         chain: str,
         network: str,
         connector: str,
-        market_name: str,
+        market_name: str = None,
         owner_address: str = None,
         order: Dict[str, Any] = None,
         orders: List[Dict[str, Any]] = None,

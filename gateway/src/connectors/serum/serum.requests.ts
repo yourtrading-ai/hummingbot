@@ -103,7 +103,7 @@ export type SerumCancelOrdersResponse = CancelOrdersResponse;
 
 export type SerumGetOpenOrdersRequest = NetworkSelectionRequest &
   (
-    | { ownerAddress: string; marketName: string; marketNames?: string[] }
+    | { ownerAddress: string; marketName?: string; marketNames?: string[] }
     | { order: GetOpenOrderRequest }
     | {
         orders: GetOpenOrdersRequest[];
