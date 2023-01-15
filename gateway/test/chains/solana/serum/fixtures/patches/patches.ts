@@ -5,6 +5,7 @@ import {
   Keypair,
   PublicKey,
   Transaction,
+  TransactionSignature,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Solana } from '../../../../../../src/chains/solana/solana';
@@ -23,7 +24,7 @@ import { patch } from '../../../../../services/patch';
 import config from '../config';
 import { convertToSerumOpenOrders, getNewSerumOrders } from '../helpers';
 import data from './data';
-import {TokenInfo} from "@solana/spl-token-registry"
+import { TokenInfo } from '@solana/spl-token-registry';
 
 let usePatches = true;
 
@@ -36,6 +37,18 @@ export const disablePatches = () => (usePatches = false);
 
 const patches = (solana: Solana, serum: Serum) => {
   const patches = new Map();
+
+  patches.set('solana/getOrCreateAssociatedTokenAccount', () => {
+    if (!usePatches) return;
+
+    patch(solana, 'getOrCreateAssociatedTokenAccount', () => {
+      return new Account(
+        Keypair.fromSecretKey(
+          bs58.decode(config.solana.wallet.owner.privateKey)
+        ).secretKey
+      );
+    });
+  });
 
   patches.set('solana/getTokenList', () => {
     if (!usePatches) return;
@@ -145,7 +158,7 @@ const patches = (solana: Solana, serum: Serum) => {
     'serum/market/findOpenOrdersAccountsForOwner',
     async (
       startIndex: number,
-      orderBooksMap: IMap<string, OrderBook>,
+      orderBooksMap?: IMap<string, OrderBook>,
       candidateOrders?: CreateOrdersRequest[]
     ) => {
       if (!usePatches) return;
@@ -161,6 +174,8 @@ const patches = (solana: Solana, serum: Serum) => {
 
         candidateOrdersMap.get(item.marketName)?.push(item);
       });
+
+      if (!orderBooksMap) orderBooksMap = await serum.getAllOrderBooks();
 
       for (const marketName of allowedMarkets) {
         const orderBook = orderBooksMap.get(marketName);
@@ -235,6 +250,54 @@ const patches = (solana: Solana, serum: Serum) => {
           'AyZgLRoT78G3KUxPiMTWF84MTQam1eL3bwuWBguufqSBU1JKVcrmGJe6XztLKJ4DfzQ8k1NQsLQnxFT4mB5F9yE0';
 
         return shuffle(example).repeat(orders.length);
+      }
+    );
+  });
+
+  patches.set('serum/serumMarketCancelOrder', () => {
+    if (!usePatches) return;
+
+    return patch(
+      serum,
+      'serumMarketCancelOrder',
+      (
+        _market: SerumMarket,
+        _connection: Connection,
+        _owner: Account,
+        _order: SerumOrder
+      ) => {
+        const shuffle = (target: string) =>
+          [...target].sort(() => Math.random() - 0.5).join('');
+
+        const example =
+          'AyZgLRoT78G3KUxPiMTWF84MTQam1eL3bwuWBguufqSBU1JKVcrmGJe6XztLKJ4DfzQ8k1NQsLQnxFT4mB5F9yE0';
+
+        return shuffle(example) as TransactionSignature;
+      }
+    );
+  });
+
+  patches.set('serum/serumMarketCancelOrders', () => {
+    if (!usePatches) return;
+
+    return patch(
+      serum,
+      'serumMarketCancelOrders',
+      (
+        _market: SerumMarket,
+        _connection: Connection,
+        _owner: Account,
+        orders: SerumOrder[]
+      ) => {
+        const shuffle = (target: string) =>
+          [...target].sort(() => Math.random() - 0.5).join('');
+
+        const example =
+          'AyZgLRoT78G3KUxPiMTWF84MTQam1eL3bwuWBguufqSBU1JKVcrmGJe6XztLKJ4DfzQ8k1NQsLQnxFT4mB5F9yE0';
+
+        return {
+          cancelations: shuffle(example).repeat(orders.length),
+        };
       }
     );
   });
