@@ -1,10 +1,10 @@
+import asyncio
 import importlib
 import inspect
 import logging
 import sys
 from decimal import Decimal
 from typing import Any, Dict, List, Set
-import asyncio
 
 import numpy as np
 import pandas as pd
@@ -38,14 +38,14 @@ class ScriptStrategyBase(StrategyPyBase):
             lsb_logger = logging.getLogger(__name__)
         return lsb_logger
 
-    def __init__(self):
+    def __init__(self, connectors: Dict[str, ConnectorBase] = {}):
         """
         Initialising a new script strategy object.
         """
         super().__init__()
         self.ready_to_trade: bool = False
         self.initialized: bool = False
-        self.connectors: Dict[str, ConnectorBase] = {}
+        self.connectors: Dict[str, ConnectorBase] = connectors
 
     @classmethod
     def load_script_class(cls, script_name):
