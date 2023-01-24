@@ -171,6 +171,7 @@ class ScriptStrategyBase(StrategyPyBase):
         """
         market_pair = self._market_trading_pair_tuple(connector_name, trading_pair)
         self.cancel_order(market_trading_pair_tuple=market_pair, order_id=order_id)
+        self.logger().info(f"({market_pair}) Canceling the limit order {order_id}.")
 
     def get_active_orders(self, connector_name: str) -> List[LimitOrder]:
         """

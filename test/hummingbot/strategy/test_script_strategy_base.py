@@ -1,5 +1,6 @@
 import unittest
 from decimal import Decimal
+from logging import Handler
 from typing import List
 
 import pandas as pd
@@ -19,15 +20,14 @@ class MockScriptStrategy(ScriptStrategyBase):
     pass
 
 
-class ScriptStrategyBaseTest(unittest.TestCase):
+class ScriptStrategyBaseTest(unittest.TestCase, Handler):
     level = 0
 
     def handle(self, record):
         self.log_records.append(record)
 
     def _is_logged(self, log_level: str, message: str) -> bool:
-        return any(record.levelname == log_level and record.getMessage().startswith(message)
-                   for record in self.log_records)
+        return any(record.levelname == log_level and record.getMessage().startswith(message) for record in self.log_records)
 
     def setUp(self):
         self.log_records = []
@@ -63,6 +63,7 @@ class ScriptStrategyBaseTest(unittest.TestCase):
         ScriptStrategyBase.markets = {self.connector_name: {self.trading_pair}}
         self.strategy = ScriptStrategyBase({self.connector_name: self.connector})
         self.strategy.markets = {self.connector_name: {self.trading_pair}}
+        self.strategy.add_markets([self.connector])
         self.strategy.logger().setLevel(1)
         self.strategy.logger().addHandler(self)
 

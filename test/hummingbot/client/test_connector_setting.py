@@ -9,6 +9,8 @@ from hummingbot.core.data_type.trade_fee import TradeFeeSchema
 
 class ConnectorSettingTests(TestCase):
 
+    init_var: str
+
     def test_connector_setting_creates_non_trading_connector_instance(self):
         setting = ConnectorSetting(
             name='binance',
