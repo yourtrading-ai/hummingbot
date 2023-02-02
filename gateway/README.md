@@ -13,18 +13,17 @@ Gateway may be used alongside the main Hummingbot client to enable trading on DE
 This is a list of DEX connections currently supported by Gateway.
 
 | Connector   | Blockchain          | Trading Interface |
-| ----------- | ------------------- | ----------------- |
+|-------------|---------------------|-------------------|
 | UniswapV2   | Ethereum            | AMM               |
-| Sushiswap   | Ethereum   | AMM               |
-| UniswapV3   | Ethereum   | EVM_Range_AMM     |
+| Sushiswap   | Ethereum            | AMM               |
+| UniswapV3   | Ethereum            | EVM_Range_AMM     |
 | Pangolin    | Avalanche           | AMM               |
 | PancakeSwap | Binance Smart Chain | AMM               |
-| Traderjoe   | Avalanche  | AMM               |
-| Quickswap   | Polygon    | AMM               |
-| Perp        | Ethereum   | EVM_Perpetual     |
-| Serum       | Solana     | CLOB              |
-| Mad Meerkat | Cronos     | AMM               |
-| VVS         | Cronos     | AMM               |
+| Traderjoe   | Avalanche           | AMM               |
+| Quickswap   | Polygon             | AMM               |
+| Perp        | Ethereum            | EVM_Perpetual     |
+| Mad Meerkat | Cronos              | AMM               |
+| VVS         | Cronos              | AMM               |
 
 
 ## Contributing

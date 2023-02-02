@@ -87,7 +87,6 @@ export namespace NetworkRoutes {
             );
         } else {
           validateEthereumBalanceRequest(req.body);
-
           const chain = await getChain<Ethereumish>(
             req.body.chain,
             req.body.network

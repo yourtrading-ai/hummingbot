@@ -93,6 +93,10 @@ describe('isNearPrivateKey', () => {
   });
 
   it('fail against a string that is invalid', () => {
+    expect(isEthPrivateKey('ed25519')).toEqual(false);
+  });
+
+  it('fail against a string that is invalid', () => {
     expect(isSolPrivateKey('ed25519')).toEqual(false);
   });
 });
