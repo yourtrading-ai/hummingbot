@@ -112,6 +112,9 @@ class ScriptStrategyBase(StrategyPyBase):
         """
         pass
 
+    def on_stop(self):
+        pass
+
     def buy(self,
             connector_name: str,
             trading_pair: str,
