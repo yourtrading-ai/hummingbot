@@ -1,5 +1,6 @@
 import unittest
 from decimal import Decimal
+from logging import Handler
 from typing import List
 
 import pandas as pd
@@ -19,7 +20,7 @@ class MockScriptStrategy(ScriptStrategyBase):
     pass
 
 
-class ScriptStrategyBaseTest(unittest.TestCase):
+class ScriptStrategyBaseTest(unittest.TestCase, Handler):
     level = 0
 
     def handle(self, record):
