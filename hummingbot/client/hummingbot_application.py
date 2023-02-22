@@ -239,8 +239,10 @@ class HummingbotApplication(*commands):
                         del kwargs["func"]
                         f(**kwargs)
         except ArgumentParserError as e:
-            if not self.be_silly(raw_command):
+            if not self.handle_script_command(raw_command):
                 self.notify(str(e))
+            # if not self.be_silly(raw_command):
+            #     self.notify(str(e))
         except NotImplementedError:
             self.notify("Command not yet implemented. This feature is currently under development.")
         except Exception as e:

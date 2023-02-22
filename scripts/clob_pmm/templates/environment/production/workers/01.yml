@@ -1,0 +1,91 @@
+chain: solana
+network: mainnet-beta
+connector: serum
+markets:
+  serum_solana_mainnet-beta:
+    - SOL-USDC
+#    - ETH-USDC
+#    - USDT-USDC
+#    - mSOL-USDC
+#    - SLND-USDC
+#    - DUMMY-USDC
+#    - SOL-USDC (NEW)
+#    - ETH-USDC (NEW)
+#    - USDT-USDC (NEW)
+#    - mSOL-USDC (NEW)
+#    - SLND-USDC (NEW)
+wallets:
+  - <wallet-public-key>
+strategy:
+  begin:
+    price: 0.01
+    inventory:
+      percentage: 99
+    timestamp: 1672531200000
+  end:
+    price: 100.00
+    inventory:
+      percentage: 1
+    timestamp: 1830297600000
+  strictness: 1
+  confidence: 0.1
+  layers:
+#  - bid:
+#      quantity: 1
+#      spread_percentage: [ 0.1, 0.5 ]
+#      max_liquidity_in_dollars: [ 1, 5 ]
+#    ask:
+#      quantity: 1
+#      spread_percentage: [ 0.1, 0.5 ]
+#      max_liquidity_in_dollars: [ 1, 5 ]
+#  - bid:
+#      quantity: 1
+#      spread_percentage: [ 0.5, 1 ]
+#      max_liquidity_in_dollars: [ 1, 5 ]
+#    ask:
+#      quantity: 1
+#      spread_percentage: [ 0.5, 1 ]
+#      max_liquidity_in_dollars: [ 1, 5 ]
+  - bid:
+      quantity: 1
+      spread_percentage:  [5, 10]
+      max_liquidity_in_dollars: [1, 5]
+    ask:
+      quantity: 1
+      spread_percentage: [5, 10]
+      max_liquidity_in_dollars: [1, 5]
+#  - bid:
+#      quantity: 1
+#      spread_percentage: [25, 50]
+#      max_liquidity_in_dollars: [1, 5]
+#    ask:
+#      quantity: 1
+#      spread_percentage: [25, 50]
+#      max_liquidity_in_dollars: [1, 5]
+#  - bid:
+#      quantity: 1
+#      spread_percentage: [50, 75]
+#      max_liquidity_in_dollars: [1, 5]
+#    ask:
+#      quantity: 1
+#      spread_percentage: [50, 75]
+#      max_liquidity_in_dollars: [1, 5]
+  tick_interval: [53, 59, 61] # preferably one or more prime numbers
+  serum_order_type: POST_ONLY # Possible options are: LIMIT, POST_ONLY, IOC
+  use_adjusted_price: false
+  price_strategy: middle # Possible options are: ticker, middle, last_fill
+  middle_price_strategy: VWAP # Possible options are: SAP, WAP, VWAP
+  cancel_all_orders_on_start: false
+  cancel_all_orders_on_stop: false
+  run_only_once: false
+kill_switch:
+  max_wallet_loss_from_initial_value: 30
+  max_wallet_loss_from_previous_value: 30
+  max_wallet_loss_compared_to_token_variation: 30
+  max_token_loss_from_initial_price: 30
+  notify:
+    telegram:
+      users:
+        - "@SomeTelegramUser"
+logger:
+  level: INFO

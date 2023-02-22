@@ -13,6 +13,7 @@ from .order_book_command import OrderBookCommand
 from .pmm_script_command import PMMScriptCommand
 from .previous_strategy_command import PreviousCommand
 from .rate_command import RateCommand
+from .script_command import ScriptCommand
 from .silly_commands import SillyCommands
 from .start_command import StartCommand
 from .status_command import StatusCommand
@@ -39,5 +40,6 @@ __all__ = [
     StatusCommand,
     StopCommand,
     TickerCommand,
-    MQTTCommand,
+    ScriptCommand,
+    MQTTCommand
 ]

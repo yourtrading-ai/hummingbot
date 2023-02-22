@@ -1,0 +1,16 @@
+workers:
+  - "01"
+  - "02"
+strategy:
+  tick_interval: [53, 59, 61] # preferably one or more prime numbers
+kill_switch:
+  max_wallet_loss_from_initial_value: 30
+  max_wallet_loss_from_previous_value: 30
+  max_wallet_loss_compared_to_token_variation: 30
+  max_token_loss_from_initial_price: 30
+  notify:
+    telegram:
+      users:
+        - "@SomeTelegramUser"
+logger:
+  level: INFO

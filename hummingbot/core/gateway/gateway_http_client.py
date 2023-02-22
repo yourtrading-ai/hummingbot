@@ -82,8 +82,10 @@ class GatewayHttpClient:
             ssl_ctx.load_cert_chain(certfile=f"{cert_path}/client_cert.pem",
                                     keyfile=f"{cert_path}/client_key.pem",
                                     password=Security.secrets_manager.password.get_secret_value())
-            conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
-            cls._shared_client = aiohttp.ClientSession(connector=conn)
+            connector = aiohttp.TCPConnector(ssl_context=ssl_ctx)
+            timeout = aiohttp.ClientTimeout(total=10 * 60)
+            cls._shared_client = aiohttp.ClientSession(connector=connector, timeout=timeout)
+
         return cls._shared_client
 
     @classmethod
@@ -956,6 +958,7 @@ class GatewayHttpClient:
         connector: str,
         order: Dict[str, Any] = None,
         orders: List[Dict[str, Any]] = None,
+        replace_if_exists: bool = False
     ) -> Dict[str, Any]:
         request = {
             "chain": chain,
@@ -968,6 +971,9 @@ class GatewayHttpClient:
 
         if orders is not None:
             request["orders"] = orders
+
+        if replace_if_exists:
+            request["replaceIfExists"] = replace_if_exists
 
         return await self.api_request("post", "clob/orders", request)
 
@@ -1002,6 +1008,7 @@ class GatewayHttpClient:
         chain: str,
         network: str,
         connector: str,
+        market_name: str = None,
         owner_address: str = None,
         order: Dict[str, Any] = None,
         orders: List[Dict[str, Any]] = None,
@@ -1021,6 +1028,9 @@ class GatewayHttpClient:
         if orders is not None:
             request["orders"] = orders
 
+        if market_name is not None:
+            request["marketName"] = market_name
+
         return await self.api_request("get", "clob/orders/open", request, use_body=True)
 
     async def clob_get_filled_orders(
@@ -1028,6 +1038,7 @@ class GatewayHttpClient:
         chain: str,
         network: str,
         connector: str,
+        market_name: str = None,
         owner_address: str = None,
         order: Dict[str, Any] = None,
         orders: List[Dict[str, Any]] = None,
@@ -1037,6 +1048,9 @@ class GatewayHttpClient:
             "network": network,
             "connector": connector,
         }
+
+        if market_name is not None:
+            request["marketName"] = market_name
 
         if owner_address is not None:
             request["ownerAddress"] = owner_address

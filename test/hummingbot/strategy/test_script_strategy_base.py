@@ -62,6 +62,8 @@ class ScriptStrategyBaseTest(unittest.TestCase):
         self.clock.add_iterator(self.connector)
         ScriptStrategyBase.markets = {self.connector_name: {self.trading_pair}}
         self.strategy = ScriptStrategyBase({self.connector_name: self.connector})
+        self.strategy.markets = {self.connector_name: {self.trading_pair}}
+        self.strategy.add_markets([self.connector])
         self.strategy.logger().setLevel(1)
         self.strategy.logger().addHandler(self)
 

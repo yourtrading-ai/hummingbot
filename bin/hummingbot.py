@@ -4,6 +4,7 @@ import asyncio
 from typing import Coroutine, List, Optional
 from weakref import ReferenceType, ref
 
+import nest_asyncio
 import path_util  # noqa: F401
 
 from bin.docker_connection import fork_and_start
@@ -24,6 +25,8 @@ from hummingbot.core.event.events import HummingbotUIEvent
 from hummingbot.core.gateway import start_existing_gateway_container
 from hummingbot.core.utils import detect_available_port
 from hummingbot.core.utils.async_utils import safe_gather
+
+nest_asyncio.apply()
 
 
 class UIStartListener(EventListener):
@@ -59,6 +62,8 @@ async def main_async(client_config_map: ClientConfigAdapter):
     AllConnectorSettings.initialize_paper_trade_settings(client_config_map.paper_trade.paper_trade_exchanges)
 
     hb = HummingbotApplication.main_application(client_config_map)
+
+    hb._initialize_notifiers()
 
     # The listener needs to have a named variable for keeping reference, since the event listener system
     # uses weak references to remove unneeded listeners.

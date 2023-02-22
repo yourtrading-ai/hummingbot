@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import inspect
 import logging
@@ -37,16 +38,14 @@ class ScriptStrategyBase(StrategyPyBase):
             lsb_logger = logging.getLogger(__name__)
         return lsb_logger
 
-    def __init__(self, connectors: Dict[str, ConnectorBase]):
+    def __init__(self, connectors: Dict[str, ConnectorBase] = {}):
         """
         Initialising a new script strategy object.
-
-        :param connectors: A dictionary of connector names and their corresponding connector.
         """
         super().__init__()
-        self.connectors: Dict[str, ConnectorBase] = connectors
         self.ready_to_trade: bool = False
-        self.add_markets(list(connectors.values()))
+        self.initialized: bool = False
+        self.connectors: Dict[str, ConnectorBase] = connectors
 
     @classmethod
     def load_script_class(cls, script_name):
@@ -69,6 +68,9 @@ class ScriptStrategyBase(StrategyPyBase):
             raise InvalidScriptModule(f"The module {script_name} does not contain any subclass of ScriptStrategyBase")
         return script_class
 
+    def get_markets_definitions(self):
+        return self.markets
+
     def tick(self, timestamp: float):
         """
         Clock tick entry point, is run every second (on normal tick setting).
@@ -83,11 +85,29 @@ class ScriptStrategyBase(StrategyPyBase):
                     self.logger().warning(f"{con.name} is not ready. Please wait...")
                 return
         else:
-            self.on_tick()
+            asyncio.get_event_loop().run_until_complete(self.on_tick())
 
-    def on_tick(self):
+    async def initialize(self, start_command):
         """
-        An event which is called on every tick, a sub class implements this to define what operation the strategy needs
+        An event which is called before starting the ticks, a subclass can override this method for custom logic.
+        """
+        market_definitions = self.get_markets_definitions()
+        markets_list = []
+        if market_definitions:
+            for connector, pairs in market_definitions.items():
+                markets_list.append((connector, list(pairs)))
+
+        # noinspection PyProtectedMember
+        start_command._initialize_markets(market_names=markets_list)
+
+        self.connectors: Dict[str, ConnectorBase] = start_command.markets
+        self.add_markets(list(start_command.markets.values()))
+
+        self.initialized = True
+
+    async def on_tick(self):
+        """
+        An event which is called on every tick, a subclass implements this to define what operation the strategy needs
         to operate on a regular tick basis.
         """
         pass
@@ -154,6 +174,7 @@ class ScriptStrategyBase(StrategyPyBase):
         """
         market_pair = self._market_trading_pair_tuple(connector_name, trading_pair)
         self.cancel_order(market_trading_pair_tuple=market_pair, order_id=order_id)
+        self.logger().info(f"({market_pair}) Canceling the limit order {order_id}.")
 
     def get_active_orders(self, connector_name: str) -> List[LimitOrder]:
         """

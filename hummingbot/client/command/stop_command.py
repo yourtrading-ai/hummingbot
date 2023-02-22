@@ -8,7 +8,7 @@ from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
 
 if TYPE_CHECKING:
-    from hummingbot.client.hummingbot_application import HummingbotApplication  # noqa: F401
+    from hummingbot.client.hummingbot_application import HummingbotApplication
 
 
 class StopCommand:
@@ -60,6 +60,7 @@ class StopCommand:
         if self.kill_switch is not None:
             self.kill_switch.stop()
 
+        self._in_start_check = False
         self.strategy_task = None
         self.strategy = None
         self.market_pair = None
