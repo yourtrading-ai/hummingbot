@@ -306,8 +306,11 @@ class HummingbotApplication(*commands):
                     for asset, balance in paper_trade_account_balance.items():
                         connector.set_balance(asset, balance)
             else:
-                keys = Security.api_keys(connector_name)
-                init_params = conn_setting.conn_init_parameters(keys)
+                if "serum" in connector_name:
+                    init_params = conn_setting.conn_init_parameters()
+                else:
+                    keys = Security.api_keys(connector_name)
+                    init_params = conn_setting.conn_init_parameters(keys)
                 init_params.update(trading_pairs=trading_pairs, trading_required=self._trading_required)
                 connector_class = get_connector_class(connector_name)
                 read_only_config = ReadOnlyClientConfigAdapter.lock_config(self.client_config_map)

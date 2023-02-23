@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Set, Un
 from pydantic import SecretStr
 
 from hummingbot import get_strategy_list, root_path
-from hummingbot.core.data_type.trade_fee import TradeFeeSchema
+from hummingbot.core.data_type.trade_fee import SolanaTradeFeeSchema, TradeFeeSchema
 from hummingbot.core.utils.gateway_config_utils import SUPPORTED_CHAINS
 
 if TYPE_CHECKING:
     from hummingbot.client.config.config_data_types import BaseConnectorConfigMap
     from hummingbot.connector.connector_base import ConnectorBase
+
+from hummingbot.connector.hybrid.serum import serum_constants
 
 # Global variables
 required_exchanges: Set[str] = set()
@@ -73,6 +75,7 @@ class ConnectorType(Enum):
     Connector = "connector"
     Exchange = "exchange"
     Derivative = "derivative"
+    Hybrid = "hybrid"
 
 
 class GatewayConnectionSetting:
@@ -113,6 +116,10 @@ class GatewayConnectionSetting:
     @staticmethod
     def get_connector_spec_from_market_name(market_name: str) -> Optional[Dict[str, str]]:
         for chain in SUPPORTED_CHAINS:
+            if "serum" in market_name and "solana" in chain:
+                connector = "serum"
+                network = serum_constants.solana_configuration["network"]
+                return GatewayConnectionSetting.get_connector_spec(connector, chain, network)
             if chain in market_name:
                 connector, network = market_name.split(f"_{chain}_")
                 return GatewayConnectionSetting.get_connector_spec(connector, chain, network)
@@ -161,7 +168,7 @@ class ConnectorSetting(NamedTuple):
     example_pair: str
     centralised: bool
     use_ethereum_wallet: bool
-    trade_fee_schema: TradeFeeSchema
+    trade_fee_schema: Union[TradeFeeSchema, SolanaTradeFeeSchema]
     config_keys: Optional["BaseConnectorConfigMap"]
     is_sub_domain: bool
     parent_name: Optional[str]
@@ -173,29 +180,39 @@ class ConnectorSetting(NamedTuple):
     """
 
     def uses_gateway_generic_connector(self) -> bool:
-        none_gateway_connectors_types = [ConnectorType.Exchange, ConnectorType.Derivative, ConnectorType.Connector]
+        none_gateway_connectors_types = [
+            ConnectorType.Exchange, ConnectorType.Derivative, ConnectorType.Connector, ConnectorType.Hybrid]
         return True if self.type not in none_gateway_connectors_types else False
+
+    def uses_hybrid_connector(self) -> bool:
+        none_hybrid_connectors_types = [ConnectorType.Exchange, ConnectorType.Derivative,
+                                        ConnectorType.Connector, ConnectorType.EVM_AMM,
+                                        ConnectorType.EVM_Perpetual, ConnectorType.NEAR_AMM,
+                                        ConnectorType.EVM_AMM_LP, ConnectorType.SOL_CLOB]
+        return True if self.type not in none_hybrid_connectors_types else False
 
     def module_name(self) -> str:
         # returns connector module name, e.g. binance_exchange
-        if self.uses_gateway_generic_connector():
+        if self.uses_gateway_generic_connector() or self.uses_hybrid_connector():
             if self.type in [ConnectorType.EVM_AMM, ConnectorType.EVM_Perpetual, ConnectorType.NEAR_AMM, ConnectorType.EVM_AMM_LP]:
                 return f"gateway.amm.gateway_{self.type.name.lower()}"
             elif ConnectorType.SOL_CLOB == self.type:
                 return f"gateway.clob.gateway_{self.type.name.lower()}"
+            elif self.type in [ConnectorType.Hybrid]:
+                return f"hybrid.{self.base_name()}.{self.base_name()}_{self.type.name.lower()}"
             else:
                 raise ValueError(f"Unsupported connector type: {self.type}")
         return f"{self.base_name()}_{self.type.name.lower()}"
 
     def module_path(self) -> str:
         # return connector full path name, e.g. hummingbot.connector.exchange.binance.binance_exchange
-        if self.uses_gateway_generic_connector():
+        if self.uses_gateway_generic_connector() or self.uses_hybrid_connector():
             return f"hummingbot.connector.{self.module_name()}"
         return f"hummingbot.connector.{self.type.name.lower()}.{self.base_name()}.{self.module_name()}"
 
     def class_name(self) -> str:
         # return connector class name, e.g. BinanceExchange
-        if self.uses_gateway_generic_connector():
+        if self.uses_gateway_generic_connector() or self.uses_hybrid_connector():
             file_name = self.module_name().split('.')[-1]
             splited_name = file_name.split('_')
             for i in range(len(splited_name)):
@@ -208,9 +225,10 @@ class ConnectorSetting(NamedTuple):
 
     def conn_init_parameters(self, api_keys: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         api_keys = api_keys or {}
-        if self.uses_gateway_generic_connector():  # init parameters for gateway connectors
+        # init parameters for gateway connectors or hybrid connectors
+        if self.uses_gateway_generic_connector() or self.uses_hybrid_connector():
             params = {}
-            if self.config_keys is not None:
+            if self.config_keys is not None and isinstance(self.config_keys, Dict):
                 params: Dict[str, Any] = {k: v.value for k, v in self.config_keys.items()}
             connector_spec: Dict[str, str] = GatewayConnectionSetting.get_connector_spec_from_market_name(self.name)
             params.update(
@@ -305,22 +323,37 @@ class AllConnectorSettings:
                 except ModuleNotFoundError:
                     continue
                 trade_fee_settings: List[float] = getattr(util_module, "DEFAULT_FEES", None)
-                trade_fee_schema: TradeFeeSchema = cls._validate_trade_fee_schema(
+                trade_fee_schema: Union[TradeFeeSchema, SolanaTradeFeeSchema] = cls._validate_trade_fee_schema(
                     connector_dir.name, trade_fee_settings
                 )
-                cls.all_connector_settings[connector_dir.name] = ConnectorSetting(
-                    name=connector_dir.name,
-                    type=ConnectorType[type_dir.name.capitalize()],
-                    centralised=getattr(util_module, "CENTRALIZED", True),
-                    example_pair=getattr(util_module, "EXAMPLE_PAIR", ""),
-                    use_ethereum_wallet=getattr(util_module, "USE_ETHEREUM_WALLET", False),
-                    trade_fee_schema=trade_fee_schema,
-                    config_keys=getattr(util_module, "KEYS", None),
-                    is_sub_domain=False,
-                    parent_name=None,
-                    domain_parameter=None,
-                    use_eth_gas_lookup=getattr(util_module, "USE_ETH_GAS_LOOKUP", False),
-                )
+                if connector_dir.name == "serum":
+                    cls.all_connector_settings[connector_dir.name] = ConnectorSetting(
+                        name=connector_dir.name,
+                        type=ConnectorType[type_dir.name.capitalize()],
+                        centralised=getattr(util_module, "CENTRALIZED", False),
+                        example_pair=getattr(util_module, "EXAMPLE_PAIR", ""),
+                        use_ethereum_wallet=False,
+                        trade_fee_schema=trade_fee_schema,
+                        config_keys=None,
+                        is_sub_domain=False,
+                        parent_name=None,
+                        domain_parameter=None,
+                        use_eth_gas_lookup=False,
+                    )
+                else:
+                    cls.all_connector_settings[connector_dir.name] = ConnectorSetting(
+                        name=connector_dir.name,
+                        type=ConnectorType[type_dir.name.capitalize()],
+                        centralised=getattr(util_module, "CENTRALIZED", True),
+                        example_pair=getattr(util_module, "EXAMPLE_PAIR", ""),
+                        use_ethereum_wallet=getattr(util_module, "USE_ETHEREUM_WALLET", False),
+                        trade_fee_schema=trade_fee_schema,
+                        config_keys=getattr(util_module, "KEYS", None),
+                        is_sub_domain=False,
+                        parent_name=None,
+                        domain_parameter=None,
+                        use_eth_gas_lookup=getattr(util_module, "USE_ETH_GAS_LOOKUP", False),
+                    )
                 # Adds other domains of connector
                 other_domains = getattr(util_module, "OTHER_DOMAINS", [])
                 for domain in other_domains:
@@ -344,7 +377,7 @@ class AllConnectorSettings:
         # add gateway connectors
         gateway_connections_conf: List[Dict[str, str]] = GatewayConnectionSetting.load()
         trade_fee_settings: List[float] = [0.0, 0.0]  # we assume no swap fees for now
-        trade_fee_schema: TradeFeeSchema = cls._validate_trade_fee_schema("gateway", trade_fee_settings)
+        trade_fee_schema: Union[TradeFeeSchema, SolanaTradeFeeSchema] = cls._validate_trade_fee_schema("gateway", trade_fee_settings)
 
         for connection_spec in gateway_connections_conf:
             market_name: str = GatewayConnectionSetting.get_market_name_from_connector_spec(connection_spec)
@@ -416,7 +449,14 @@ class AllConnectorSettings:
     def get_exchange_names(cls) -> Set[str]:
         return {
             cs.name for cs in cls.get_connector_settings().values() if cs.type is ConnectorType.Exchange
+            or ConnectorType.Hybrid
         }.union(set(PAPER_TRADE_EXCHANGES))
+
+    @classmethod
+    def get_hybrid_names(cls) -> Set[str]:
+        return {
+            cs.name for cs in cls.get_connector_settings().values() if cs.type is ConnectorType.Hybrid
+        }
 
     @classmethod
     def get_derivative_names(cls) -> Set[str]:
@@ -447,6 +487,10 @@ class AllConnectorSettings:
         return {cs.name for cs in cls.all_connector_settings.values() if cs.type == ConnectorType.SOL_CLOB}
 
     @classmethod
+    def get_hybrid_connector_names(cls) -> Set[str]:
+        return {cs.name for cs in cls.all_connector_settings.values() if cs.type == ConnectorType.Hybrid}
+
+    @classmethod
     def get_example_pairs(cls) -> Dict[str, str]:
         return {name: cs.example_pair for name, cs in cls.get_connector_settings().items()}
 
@@ -456,20 +500,27 @@ class AllConnectorSettings:
 
     @staticmethod
     def _validate_trade_fee_schema(
-        exchange_name: str, trade_fee_schema: Optional[Union[TradeFeeSchema, List[float]]]
+        exchange_name: str, trade_fee_schema: Optional[Union[TradeFeeSchema, SolanaTradeFeeSchema, List[float]]]
     ) -> TradeFeeSchema:
-        if not isinstance(trade_fee_schema, TradeFeeSchema):
-            # backward compatibility
-            maker_percent_fee_decimal = (
-                Decimal(str(trade_fee_schema[0])) / Decimal("100") if trade_fee_schema is not None else Decimal("0")
+        if exchange_name == "serum":
+            trade_fee_schema = SolanaTradeFeeSchema(
+                mpoll_interval=serum_constants.POLL_INTERVAL,
+                one_lamport=serum_constants.ONE_LAMPORT,
+                five_thousand_lamports=serum_constants.FIVE_THOUSAND_LAMPORTS
             )
-            taker_percent_fee_decimal = (
-                Decimal(str(trade_fee_schema[1])) / Decimal("100") if trade_fee_schema is not None else Decimal("0")
-            )
-            trade_fee_schema = TradeFeeSchema(
-                maker_percent_fee_decimal=maker_percent_fee_decimal,
-                taker_percent_fee_decimal=taker_percent_fee_decimal,
-            )
+        else:
+            if not isinstance(trade_fee_schema, TradeFeeSchema):
+                # backward compatibility
+                maker_percent_fee_decimal = (
+                    Decimal(str(trade_fee_schema[0])) / Decimal("100") if trade_fee_schema is not None else Decimal("0")
+                )
+                taker_percent_fee_decimal = (
+                    Decimal(str(trade_fee_schema[1])) / Decimal("100") if trade_fee_schema is not None else Decimal("0")
+                )
+                trade_fee_schema = TradeFeeSchema(
+                    maker_percent_fee_decimal=maker_percent_fee_decimal,
+                    taker_percent_fee_decimal=taker_percent_fee_decimal,
+                )
         return trade_fee_schema
 
 
@@ -509,6 +560,13 @@ def gateway_connector_trading_pairs(connector: str) -> List[str]:
            conn == connector:
             ret_val += t_pair
     return ret_val
+
+
+def hybrid_connector_trading_pairs() -> List[str]:
+    trading_pairs: [str]
+    from hummingbot.connector.hybrid.serum.serum_constants import serum_configuration
+    trading_pairs = serum_configuration["markets"]["whitelist"]
+    return trading_pairs
 
 
 MAXIMUM_OUTPUT_PANE_LINE_COUNT = 1000

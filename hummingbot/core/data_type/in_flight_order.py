@@ -4,11 +4,11 @@ import math
 import typing
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 from async_timeout import timeout
 
-from hummingbot.core.data_type.common import OrderType, PositionAction, TradeType
+from hummingbot.core.data_type.common import OrderType, PositionAction, SerumOrderType, SerumTradeType, TradeType
 from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.data_type.trade_fee import TradeFeeBase
 
@@ -90,8 +90,8 @@ class InFlightOrder:
             self,
             client_order_id: str,
             trading_pair: str,
-            order_type: OrderType,
-            trade_type: TradeType,
+            order_type: Union[OrderType, SerumOrderType],
+            trade_type: Union[TradeType, SerumTradeType],
             amount: Decimal,
             creation_timestamp: float,
             price: Optional[Decimal] = None,

@@ -168,6 +168,8 @@ class StatusCommand:
             return False
 
         network_timeout = float(self.client_config_map.commands_timeout.other_commands_timeout)
+        if "serum" in self.strategy_config_map["exchange"].value:
+            network_timeout = float(self.client_config_map.commands_timeout.slowly_other_commands_timeout)
         try:
             invalid_conns = await asyncio.wait_for(self.validate_required_connections(), network_timeout)
         except asyncio.TimeoutError:

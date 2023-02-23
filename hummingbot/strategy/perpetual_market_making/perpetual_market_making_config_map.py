@@ -6,6 +6,7 @@ from hummingbot.client.config.config_validators import (
     validate_decimal,
     validate_derivative,
     validate_exchange,
+    validate_hybrid,
     validate_int,
     validate_market_trading_pair,
 )
@@ -76,7 +77,8 @@ def price_source_market_prompt() -> str:
 def validate_price_source_derivative(value: str) -> Optional[str]:
     if value == perpetual_market_making_config_map.get("derivative").value:
         return "Price source derivative cannot be the same as maker derivative."
-    if validate_derivative(value) is not None and validate_exchange(value) is not None:
+    if validate_derivative(value) is not None and validate_exchange(value) is not None \
+       and validate_hybrid(value) is not None:
         return "Price source must must be a valid exchange or derivative connector."
 
 

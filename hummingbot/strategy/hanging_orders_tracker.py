@@ -7,9 +7,12 @@ from hummingbot.core.data_type.limit_order import LimitOrder
 from hummingbot.core.event.event_forwarder import SourceInfoEventForwarder
 from hummingbot.core.event.events import (
     BuyOrderCompletedEvent,
+    ConsumeEventsEvent,
     MarketEvent,
+    MatchOrdersEvent,
     OrderCancelledEvent,
     SellOrderCompletedEvent,
+    SerumMarketEvent,
 )
 from hummingbot.logger import HummingbotLogger
 from hummingbot.strategy.data_types import HangingOrder
@@ -70,10 +73,16 @@ class HangingOrdersTracker:
             self._did_complete_buy_order)
         self._complete_sell_order_forwarder: SourceInfoEventForwarder = SourceInfoEventForwarder(
             self._did_complete_sell_order)
-        self._event_pairs: List[Tuple[MarketEvent, SourceInfoEventForwarder]] = [
+        self._consume_events_forwarder: SourceInfoEventForwarder = SourceInfoEventForwarder(
+            self._did_consume_events)
+        self._match_orders_forwarder: SourceInfoEventForwarder = SourceInfoEventForwarder(
+            self._did_match_orders)
+        self._event_pairs: List[Tuple[Union[MarketEvent, SerumMarketEvent], SourceInfoEventForwarder]] = [
             (MarketEvent.OrderCancelled, self._cancel_order_forwarder),
             (MarketEvent.BuyOrderCompleted, self._complete_buy_order_forwarder),
-            (MarketEvent.SellOrderCompleted, self._complete_sell_order_forwarder)]
+            (MarketEvent.SellOrderCompleted, self._complete_sell_order_forwarder),
+            (SerumMarketEvent.consumeEvents, self._consume_events_forwarder),
+            (SerumMarketEvent.matchOrders, self._match_orders_forwarder)]
 
     @property
     def hanging_orders_cancel_pct(self):
@@ -156,6 +165,18 @@ class HangingOrdersTracker:
                                               if original_order.client_order_id == order.order_id), None)
             if limit_order_to_be_removed:
                 self.remove_order(limit_order_to_be_removed)
+
+    def _did_consume_events(self, event: ConsumeEventsEvent):
+        if event:
+            if event.is_done:
+                self.logger().notify(
+                    f"The market was cranked using {event.consumeEventsLimit} consumeEvents per instruction.")
+
+    def _did_match_orders(self, event: MatchOrdersEvent):
+        if event:
+            if event.is_done:
+                self.logger().notify(
+                    f"The market was cranked using {event.matchOrdersLimit} matchOrders per instruction.")
 
     def process_tick(self):
         """Updates the currently active hanging orders.

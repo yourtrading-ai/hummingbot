@@ -8,6 +8,7 @@ from hummingbot.client.config.config_validators import (
     validate_datetime_iso_string,
     validate_decimal,
     validate_exchange,
+    validate_hybrid,
     validate_market_trading_pair,
 )
 from hummingbot.client.config.config_var import ConfigVar
@@ -73,7 +74,7 @@ twap_config_map = {
     "connector":
         ConfigVar(key="connector",
                   prompt="Enter the name of spot connector >>> ",
-                  validator=validate_exchange,
+                  validator=validate_exchange or validate_hybrid,
                   on_validated=lambda value: required_exchanges.add(value),
                   prompt_on_new=True),
     "trading_pair":

@@ -55,6 +55,7 @@ connector_status = {
     'mad_meerkat': 'bronze',
     'vvs': 'bronze',
     'ref': 'bronze',
+    'serum': 'silver',
 }
 
 warning_messages = {

@@ -19,6 +19,15 @@ def validate_exchange(value: str) -> Optional[str]:
         return f"Invalid exchange, please choose value from {AllConnectorSettings.get_exchange_names()}"
 
 
+def validate_hybrid(value: str) -> Optional[str]:
+    """
+    Restrict valid hybrid connectors to the hybrid connectors file names
+    """
+    from hummingbot.client.settings import AllConnectorSettings
+    if value not in AllConnectorSettings.get_hybrid_connector_names():
+        return f"Invalid hybrid connector, please choose value from {AllConnectorSettings.get_hybrid_names()}"
+
+
 def validate_derivative(value: str) -> Optional[str]:
     """
     restrict valid derivatives to the derivative file names

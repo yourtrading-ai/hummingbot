@@ -32,6 +32,11 @@ class MarketEvent(Enum):
     RangePositionClosed = 305
 
 
+class SerumMarketEvent(Enum):
+    consumeEvents = 2101
+    matchOrders = 2102
+
+
 class OrderBookEvent(int, Enum):
     TradeEvent = 901
 
@@ -306,3 +311,15 @@ class PositionModeChangeEvent:
     trading_pair: str
     position_mode: PositionMode
     message: Optional[str] = None
+
+
+@dataclass
+class ConsumeEventsEvent:
+    is_done: bool
+    consumeEventsLimit: int
+
+
+@dataclass
+class MatchOrdersEvent:
+    is_done: bool
+    matchOrdersLimit: int

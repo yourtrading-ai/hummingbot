@@ -5,7 +5,12 @@ from typing import Dict, List, Optional, Set
 from hummingbot.client.config.client_config_map import ClientConfigMap
 from hummingbot.client.config.config_helpers import ReadOnlyClientConfigAdapter, get_connector_class
 from hummingbot.client.config.security import Security
-from hummingbot.client.settings import AllConnectorSettings, GatewayConnectionSetting, gateway_connector_trading_pairs
+from hummingbot.client.settings import (
+    AllConnectorSettings,
+    GatewayConnectionSetting,
+    gateway_connector_trading_pairs,
+    hybrid_connector_trading_pairs,
+)
 from hummingbot.core.utils.async_utils import safe_gather
 from hummingbot.core.utils.gateway_config_utils import flatten
 from hummingbot.core.utils.market_price import get_last_price
@@ -18,17 +23,23 @@ class UserBalances:
     def connect_market(exchange, client_config_map: ClientConfigMap, **api_details):
         connector = None
         conn_setting = AllConnectorSettings.get_connector_settings()[exchange]
-        if api_details or conn_setting.uses_gateway_generic_connector():
+        if api_details or conn_setting.uses_gateway_generic_connector() or conn_setting.uses_hybrid_connector():
             connector_class = get_connector_class(exchange)
             init_params = conn_setting.conn_init_parameters(api_details)
 
             # collect trading pairs from the gateway connector settings
-            trading_pairs: List[str] = gateway_connector_trading_pairs(conn_setting.name)
+            if "serum" in conn_setting.name:
+                trading_pairs: List[str] = hybrid_connector_trading_pairs()
+            else:
+                trading_pairs: List[str] = gateway_connector_trading_pairs(conn_setting.name)
 
             # collect unique trading pairs that are for balance reporting only
             config: Optional[Dict[str, str]] = GatewayConnectionSetting.get_connector_spec_from_market_name(conn_setting.name)
             if config is not None:
-                existing_pairs = set(flatten([x.split("-") for x in trading_pairs]))
+                if "serum" in init_params["connector_name"]:
+                    existing_pairs = set(flatten([x.split("/") for x in trading_pairs]))
+                else:
+                    existing_pairs = set(flatten([x.split("-") for x in trading_pairs]))
 
                 other_tokens: Set[str] = set(config.get("tokens", "").split(","))
                 other_tokens.discard("")
@@ -37,10 +48,17 @@ class UserBalances:
                     trading_pairs.append("-".join(tokens))
 
             read_only_client_config = ReadOnlyClientConfigAdapter.lock_config(client_config_map)
-            init_params.update(
-                trading_pairs=gateway_connector_trading_pairs(conn_setting.name),
-                client_config_map=read_only_client_config,
-            )
+            if "serum" in conn_setting.name:
+                init_params.update(
+                    trading_pairs=hybrid_connector_trading_pairs(),
+                    client_config_map=read_only_client_config,
+                    connector_name=conn_setting.name
+                )
+            else:
+                init_params.update(
+                    trading_pairs=gateway_connector_trading_pairs(conn_setting.name),
+                    client_config_map=read_only_client_config,
+                )
             connector = connector_class(**init_params)
         return connector
 
@@ -72,6 +90,13 @@ class UserBalances:
             )
         )
 
+    @staticmethod
+    def is_hybrid_market(exchange_name: str) -> bool:
+        return (exchange_name in sorted(
+            AllConnectorSettings.get_hybrid_connector_names()
+        )
+        )
+
     def __init__(self):
         if UserBalances.__instance is not None:
             raise Exception("This class is a singleton!")
@@ -96,6 +121,7 @@ class UserBalances:
 
     async def update_exchange_balance(self, exchange_name: str, client_config_map: ClientConfigMap) -> Optional[str]:
         is_gateway_market = self.is_gateway_market(exchange_name)
+        is_hybrid_market = self.is_hybrid_market(exchange_name)
         if is_gateway_market and exchange_name in self._markets:
             # we want to refresh gateway connectors always, since the applicable tokens change over time.
             # doing this will reinitialize and fetch balances for active trading pair
@@ -104,7 +130,7 @@ class UserBalances:
             return await self._update_balances(self._markets[exchange_name])
         else:
             await Security.wait_til_decryption_done()
-            api_keys = Security.api_keys(exchange_name) if not is_gateway_market else {}
+            api_keys = Security.api_keys(exchange_name) if not is_gateway_market or is_hybrid_market else {}
             return await self.add_exchange(exchange_name, client_config_map, **api_keys)
 
     # returns error message for each exchange

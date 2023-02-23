@@ -6,6 +6,7 @@ from hummingbot.client.config.config_validators import (
     validate_bool,
     validate_decimal,
     validate_exchange,
+    validate_hybrid,
     validate_int,
     validate_market_trading_pair,
 )
@@ -70,7 +71,7 @@ aroon_oscillator_config_map = {
     "exchange":
         ConfigVar(key="exchange",
                   prompt="Enter your maker spot connector >>> ",
-                  validator=validate_exchange,
+                  validator=validate_exchange or validate_hybrid,
                   on_validated=exchange_on_validated,
                   prompt_on_new=True),
     "market":

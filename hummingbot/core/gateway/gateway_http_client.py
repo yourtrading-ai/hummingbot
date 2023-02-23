@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 import aiohttp
 
 from hummingbot.client.config.security import Security
+from hummingbot.client.settings import GatewayConnectionSetting
+from hummingbot.connector.hybrid.serum import serum_constants
 from hummingbot.core.data_type.common import PositionSide
 from hummingbot.core.event.events import TradeType
 from hummingbot.logger import HummingbotLogger
@@ -46,6 +48,8 @@ class GatewayHttpClient:
     _shared_client: Optional[aiohttp.ClientSession] = None
     _base_url: str
 
+    _is_serum_connector: bool
+
     __instance = None
 
     @staticmethod
@@ -54,13 +58,18 @@ class GatewayHttpClient:
             GatewayHttpClient(client_config_map)
         return GatewayHttpClient.__instance
 
-    def __init__(self, client_config_map: Optional["ClientConfigAdapter"] = None):
+    def __init__(
+        self,
+        client_config_map: Optional["ClientConfigAdapter"] = None,
+        is_serum_connector: bool = False,
+        base_url: str = ""
+    ):
         if client_config_map is None:
             from hummingbot.client.hummingbot_application import HummingbotApplication
             client_config_map = HummingbotApplication.main_application().client_config_map
         api_host = client_config_map.gateway.gateway_api_host
         api_port = client_config_map.gateway.gateway_api_port
-        if GatewayHttpClient.__instance is None:
+        if GatewayHttpClient.__instance is None or is_serum_connector:
             self._base_url = f"https://{api_host}:{api_port}"
         self._client_config_map = client_config_map
         GatewayHttpClient.__instance = self
@@ -282,6 +291,16 @@ class GatewayHttpClient:
         if isinstance(token_symbols, list):
             token_symbols = [x for x in token_symbols if isinstance(x, str) and x.strip() != '']
             network_path = "near" if chain == "near" else "network"
+            if "solana" in chain:
+                network_path = "solana"
+                request = await self.api_request("get", f"{network_path}/balances", {
+                    "chain": chain,
+                    "network": network,
+                    "address": address,
+                    "tokenSymbols": token_symbols,
+                }, fail_silently=fail_silently)
+
+                return request
             return await self.api_request("post", f"{network_path}/balances", {
                 "chain": chain,
                 "network": network,
@@ -298,10 +317,19 @@ class GatewayHttpClient:
             fail_silently: bool = True
     ) -> Dict[str, Any]:
         network_path = "near" if chain == "near" else "network"
-        return await self.api_request("get", f"{network_path}/tokens", {
-            "chain": chain,
-            "network": network
-        }, fail_silently=fail_silently)
+        if "solana" in chain:
+            network_path = chain
+            result = await self.api_request("get", f"{network_path}/tokens", {
+                "chain": chain,
+                "network": network
+            }, use_body=True, fail_silently=fail_silently)
+
+            return result
+        else:
+            return await self.api_request("get", f"{network_path}/token", {
+                "chain": chain,
+                "network": network
+            }, fail_silently=fail_silently)
 
     async def get_network_status(
             self,
@@ -807,11 +835,21 @@ class GatewayHttpClient:
         address: str,
         token_symbols: List[str]
     ) -> Dict[str, Any]:
-        return await self.api_request("get", "solana/balances", {
+        response = await self.api_request("get", "solana/balances", {
             "network": network,
             "address": address,
             "tokenSymbols": token_symbols
         }, use_body=True)
+        return response
+
+    async def _update_balances(self) -> Optional:
+
+        network: str = serum_constants.solana_configuration["network"]
+        wallet_address: str = GatewayConnectionSetting.load()[0]["wallet_address"]
+        token_symbols: List[str] = serum_constants.serum_configuration["markets"]["whitelist"]
+
+        result = await self.solana_get_balances(network, wallet_address, token_symbols)
+        return result
 
     async def solana_get_token(
         self,

@@ -872,7 +872,7 @@ class ClientConfigMap(BaseClientModel):
         ),
     )
     balance_asset_limit: Dict[str, Dict[str, Decimal]] = Field(
-        default={exchange: {} for exchange in AllConnectorSettings.get_exchange_names()},
+        default={exchange: {} for exchange in AllConnectorSettings.get_exchange_names().union(AllConnectorSettings.get_hybrid_names())},
         description=("Balance Limit Configurations"
                      "\ne.g. Setting USDT and BTC limits on Binance."
                      "\nbalance_asset_limit:"

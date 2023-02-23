@@ -3,6 +3,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from hummingbot.client.config.config_helpers import ClientConfigAdapter
 from hummingbot.client.settings import AllConnectorSettings, ConnectorSetting
+from hummingbot.connector.hybrid.serum.serum_constants import serum_configuration
 from hummingbot.logger import HummingbotLogger
 
 from .async_utils import safe_ensure_future
@@ -11,6 +12,7 @@ from .async_utils import safe_ensure_future
 class TradingPairFetcher:
     _sf_shared_instance: "TradingPairFetcher" = None
     _tpf_logger: Optional[HummingbotLogger] = None
+    _serum_configuration: [str]
 
     @classmethod
     def logger(cls) -> HummingbotLogger:
@@ -29,6 +31,7 @@ class TradingPairFetcher:
         self.ready = False
         self.trading_pairs: Dict[str, Any] = {}
         self._fetch_task = safe_ensure_future(self.fetch_all(client_config_map))
+        self._serum_configuration = serum_configuration
 
     def _fetch_pairs_from_connector_setting(
             self,
@@ -53,7 +56,11 @@ class TradingPairFetcher:
             # XXX(martin_kou): Some connectors, e.g. uniswap v3, aren't completed yet. Ignore if you can't find the
             # data source module for them.
             try:
-                if conn_setting.base_name().endswith("paper_trade"):
+                if "serum" in conn_setting.base_name():
+                    trading_pairs = self._serum_configuration["markets"]["whitelist"]
+                    if not trading_pairs:
+                        raise Exception
+                elif conn_setting.base_name().endswith("paper_trade"):
                     self._fetch_pairs_from_connector_setting(
                         connector_setting=connector_settings[conn_setting.parent_name],
                         connector_name=conn_setting.name

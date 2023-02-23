@@ -33,6 +33,14 @@ class ConnectCommand:
             self.notify("This is a gateway connector. Use `gateway connect` command instead.")
             return
 
+        if connector_name == "serum":
+            self.placeholder_mode = True
+            self.app.hide_input = False
+            self.notify("Solana's network does not work by authentication with API key and secret key, the orders are "
+                        "signed locally with the private key of the user's keypair and this private key is never "
+                        "sent. Use the 'gateway connect serum' command instead.")
+            return
+
         self.app.clear_input()
         self.placeholder_mode = True
         self.app.hide_input = True
@@ -95,19 +103,28 @@ class ConnectCommand:
             keys_added = "No"
             keys_confirmed = "No"
             status = get_connector_status(option)
-
-            api_keys = (
-                Security.api_keys(option).values()
-                if not UserBalances.instance().is_gateway_market(option)
-                else {}
-            )
-            if len(api_keys) > 0:
-                keys_added = "Yes"
-                err_msg = err_msgs.get(option)
-                if err_msg is not None:
-                    failed_msgs[option] = err_msg
-                else:
-                    keys_confirmed = "Yes"
+            if option == "serum":
+                serum_config = Security.decrypted_value(option)
+                if serum_config is not None:
+                    keys_added = "Yes"
+                    err_msg = await self.validate_n_connect_celo(True)
+                    if err_msg is not None:
+                        failed_msgs[option] = err_msg
+                    else:
+                        keys_confirmed = "Yes"
+            else:
+                api_keys = (
+                    Security.api_keys(option).values()
+                    if not UserBalances.instance().is_gateway_market(option)
+                    else {}
+                )
+                if len(api_keys) > 0:
+                    keys_added = "Yes"
+                    err_msg = err_msgs.get(option)
+                    if err_msg is not None:
+                        failed_msgs[option] = err_msg
+                    else:
+                        keys_confirmed = "Yes"
             data.append([option, keys_added, keys_confirmed, status])
         return pd.DataFrame(data=data, columns=columns), failed_msgs
 

@@ -135,7 +135,7 @@ class StartCommand(GatewayChainApiManager):
 
             # confirm gateway connection
             conn_setting: settings.ConnectorSetting = settings.AllConnectorSettings.get_connector_settings()[connector]
-            if conn_setting.uses_gateway_generic_connector():
+            if conn_setting.uses_gateway_generic_connector() or conn_setting.uses_hybrid_connector():
                 connector_details: Dict[str, Any] = conn_setting.conn_init_parameters()
                 if connector_details:
                     data: List[List[str]] = [

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Dict, List
 
 import pandas as pd
 
-from hummingbot.client.config.config_validators import validate_decimal, validate_exchange
+from hummingbot.client.config.config_validators import validate_decimal, validate_exchange, validate_hybrid
 from hummingbot.client.performance import PerformanceMetrics
 from hummingbot.client.settings import AllConnectorSettings
 from hummingbot.core.rate_oracle.rate_oracle import RateOracle
@@ -40,7 +40,8 @@ class BalanceCommand:
                 if args is None or len(args) == 0:
                     safe_ensure_future(self.show_asset_limits())
                     return
-                if len(args) != 3 or validate_exchange(args[0]) is not None or validate_decimal(args[2]) is not None:
+                if len(args) != 3 or validate_exchange(args[0]) is not None or validate_hybrid(args[0]) is \
+                   not None or validate_decimal(args[2]) is not None:
                     self.notify("Error: Invalid command arguments")
                     self.notify_balance_limit_set()
                     return
@@ -124,7 +125,7 @@ class BalanceCommand:
             avai = Decimal(ex_avai_balances.get(token.upper(), 0)) if ex_avai_balances is not None else Decimal(0)
             # show zero balances if it is a gateway connector (the user manually
             # chose to show those values with 'gateway connector-tokens')
-            if conn_setting.uses_gateway_generic_connector():
+            if conn_setting.uses_gateway_generic_connector() and conn_setting.uses_hybrid_connector():
                 if bal == Decimal(0):
                     allocated = "0%"
                 else:

@@ -5,6 +5,7 @@ from pydantic import Field, validator
 from hummingbot.client.config.config_data_types import BaseClientModel, ClientConfigEnum, ClientFieldData
 from hummingbot.client.config.config_validators import (
     validate_exchange,
+    validate_hybrid,
     validate_market_trading_pair,
     validate_strategy,
 )
@@ -62,7 +63,7 @@ class BaseTradingStrategyConfigMap(BaseStrategyConfigMap):
     @validator("exchange", pre=True)
     def validate_exchange(cls, v: str):
         """Used for client-friendly error output."""
-        ret = validate_exchange(v)
+        ret = validate_exchange(v) or validate_hybrid(v)
         if ret is not None:
             raise ValueError(ret)
         return v
@@ -140,7 +141,7 @@ class BaseTradingStrategyMakerTakerConfigMap(BaseStrategyConfigMap):
     )
     def validate_exchange(cls, v: str, field: Field):
         """Used for client-friendly error output."""
-        ret = validate_exchange(v)
+        ret = validate_exchange(v) or validate_hybrid(v)
         if ret is not None:
             raise ValueError(ret)
         return v

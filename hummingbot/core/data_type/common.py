@@ -12,6 +12,15 @@ class OrderType(Enum):
         return self in (OrderType.LIMIT, OrderType.LIMIT_MAKER)
 
 
+class SerumOrderType(Enum):
+    LIMIT = 1
+    POST_ONLY = 2
+    IOC = 3
+
+    def is_limit_type(self):
+        return self in SerumOrderType.LIMIT
+
+
 class OpenOrder(NamedTuple):
     client_order_id: str
     trading_pair: str
@@ -58,6 +67,11 @@ class TradeType(Enum):
     BUY = 1
     SELL = 2
     RANGE = 3
+
+
+class SerumTradeType(Enum):
+    BUY = 1
+    SELL = 2
 
 
 class LPType(Enum):

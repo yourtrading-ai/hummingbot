@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Type
 
+from hummingbot.connector.gateway.clob import clob_constants
 from hummingbot.connector.utils import combine_to_hb_trading_pair, split_hb_trading_pair
 from hummingbot.core.data_type.common import PositionAction, PriceType, TradeType
 
@@ -69,6 +70,14 @@ class TradeFeeSchema:
             self.maker_fixed_fees[i] = TokenAmount(
                 self.maker_fixed_fees[i].token, Decimal(self.maker_fixed_fees[i].amount)
             )
+
+
+@dataclass
+class SolanaTradeFeeSchema:
+
+    mpoll_interval: float = clob_constants.POLL_INTERVAL,
+    one_lamport: Decimal = clob_constants.ONE_LAMPORT,
+    five_thousand_lamports: Decimal = clob_constants.FIVE_THOUSAND_LAMPORTS,
 
 
 @dataclass
