@@ -71,6 +71,12 @@ class Worker(ScriptStrategyBase):
             self._open_orders: Dict[str, Any]
             self._filled_orders: Dict[str, Any]
             self.summary = {
+                "configurations": {
+                    "serum_order_type": str,
+                    "price_strategy": str,
+                    "middle_price_strategy": str,
+                    "use_adjusted_price": bool
+                },
                 "price": {
                     "expected_price": decimal_zero,
                     "ticker_price": decimal_zero,
@@ -265,8 +271,7 @@ class Worker(ScriptStrategyBase):
         try:
             self._log(DEBUG, """_create_or_load_configuration... start""")
 
-            configuration_filepath = Path(Path.cwd(), "conf", "scripts", self._script_name, "environment",
-                                          self.environment, "workers", f"{self.id}.yml")
+            configuration_filepath = Path(Path.cwd(), "conf", "scripts", self._script_name, "environment", self.environment, "workers", f"{self.id}.yml")
 
             if configuration_filepath.exists():
                 result = yaml.safe_load(configuration_filepath.read_text())
@@ -297,6 +302,11 @@ class Worker(ScriptStrategyBase):
             vwap = await self._get_market_mid_price(bids, asks, MiddlePriceStrategy.VWAP)
 
             price_strategy = self.configuration["strategy"]["price_strategy"]
+            self.summary["configurations"]["price_strategy"] = price_strategy
+
+            middle_price_strategy = self.configuration["strategy"].get("middle_price_strategy", "VWAP")
+            self.summary["configurations"]["middle_price_strategy"] = middle_price_strategy
+
             if price_strategy == "ticker":
                 used_price = ticker_price
             elif price_strategy == "middle":
@@ -315,7 +325,10 @@ class Worker(ScriptStrategyBase):
             else:
                 raise ValueError("""Invalid "strategy.middle_price_strategy" configuration value.""")
 
-            if self.configuration["strategy"]["use_adjusted_price"]:
+            use_adjusted_price = self.configuration["strategy"]["use_adjusted_price"]
+            self.summary["configurations"]["use_adjusted_price"] = use_adjusted_price
+
+            if use_adjusted_price:
                 adjusted_market_price = await self._calculate_adjusted_market_price(used_price, bids, asks)
                 used_price = adjusted_market_price
             else:
@@ -821,6 +834,9 @@ class Worker(ScriptStrategyBase):
         try:
             self._log(DEBUG, """_replace_orders... start""")
 
+            serum_order_type = self.configuration["strategy"].get("serum_order_type", "LIMIT")
+            self.summary["configurations"]["serum_order_type"] = serum_order_type
+
             response = None
             try:
                 orders = []
@@ -833,7 +849,7 @@ class Worker(ScriptStrategyBase):
                         "side": convert_order_side(candidate.order_side).value[0],
                         "price": float(candidate.price),
                         "amount": float(candidate.amount),
-                        "type": SerumOrderType[self.configuration["strategy"].get("serum_order_type", "LIMIT")].value[
+                        "type": SerumOrderType[serum_order_type].value[
                             0],
                         "replaceIfExists": True
                     })
@@ -1195,18 +1211,15 @@ class Worker(ScriptStrategyBase):
 
                 open_orders_balance = await self._get_open_orders_balance()
                 self.summary["balance"]["orders"]["base"]["bids"] = open_orders_balance["quote"] / \
-                                                                    self.summary["token"]["current_price"]
+                    self.summary["token"]["current_price"]
                 self.summary["balance"]["orders"]["base"]["asks"] = open_orders_balance["base"]
-                self.summary["balance"]["orders"]["base"]["total"] = self.summary["balance"]["orders"]["base"][
-                                                                         "bids"] + \
-                                                                     self.summary["balance"]["orders"]["base"]["asks"]
+                self.summary["balance"]["orders"]["base"]["total"] = self.summary["balance"]["orders"]["base"]["bids"] + \
+                    self.summary["balance"]["orders"]["base"]["asks"]
                 self.summary["balance"]["orders"]["quote"]["bids"] = open_orders_balance["quote"]
                 self.summary["balance"]["orders"]["quote"]["asks"] = open_orders_balance["base"] * \
-                                                                     self.summary["token"]["current_price"]
-                self.summary["balance"]["orders"]["quote"]["total"] = self.summary["balance"]["orders"]["quote"][
-                                                                          "bids"] + \
-                                                                      self.summary["balance"]["orders"]["quote"][
-                                                                          "asks"]
+                    self.summary["token"]["current_price"]
+                self.summary["balance"]["orders"]["quote"]["total"] = self.summary["balance"]["orders"]["quote"]["bids"] + \
+                    self.summary["balance"]["orders"]["quote"]["asks"]
 
                 self.summary["wallet"]["previous_value"] = self.summary["wallet"]["current_value"]
                 self.summary["wallet"]["current_value"] = await self._get_wallet_value()
@@ -1258,8 +1271,7 @@ class Worker(ScriptStrategyBase):
                             return
 
                     if self.configuration["kill_switch"]["max_wallet_loss_compared_to_token_variation"]:
-                        if math.fabs(wallet_current_initial_pnl - token_current_initial_pnl) >= math.fabs(
-                            max_wallet_loss_compared_to_token_variation):
+                        if math.fabs(wallet_current_initial_pnl - token_current_initial_pnl) >= math.fabs(max_wallet_loss_compared_to_token_variation):
                             self._log(CRITICAL,
                                       f"""The bot has been stopped because the wallet lost {-wallet_current_initial_pnl}%, which is at least {max_wallet_loss_compared_to_token_variation}% distant from the token price variation ({token_current_initial_pnl}) from its initial price.\n/cc {users}""",
                                       True)
@@ -1267,8 +1279,7 @@ class Worker(ScriptStrategyBase):
 
                             return
 
-                if token_current_initial_pnl < 0 and math.fabs(token_current_initial_pnl) >= math.fabs(
-                    max_token_loss_from_initial):
+                if token_current_initial_pnl < 0 and math.fabs(token_current_initial_pnl) >= math.fabs(max_token_loss_from_initial):
                     self._log(CRITICAL,
                               f"""The bot has been stopped because the token lost {-token_current_initial_pnl}%, which is at least {max_token_loss_from_initial}% distant from the token initial price.\n/cc {users}""",
                               True)
@@ -1330,6 +1341,25 @@ class Worker(ScriptStrategyBase):
                 groups[5].append(self._quote_token)
 
             canceled_orders_summary = format_lines(groups)
+
+        sot = self.configuration["strategy"].get("serum_order_type", "LIMIT")
+        ps = self.configuration["strategy"]["price_strategy"]
+        uap = self.configuration["strategy"]["use_adjusted_price"]
+        mps = self.configuration["strategy"].get("middle_price_strategy", "VWAP")
+
+        self._log(
+            INFO,
+            textwrap.dedent(
+                f"""\
+                <b>Settings</b>:
+                {format_line("OrderType: ", sot)}\
+                {format_line("PriceStrategy: ", ps)}\
+                {format_line("UseAdjusted$: ", uap)}\
+                {format_line("Mid$Strategy: ", mps)}\
+                """
+            ),
+            True
+        )
 
         self._log(
             INFO,
