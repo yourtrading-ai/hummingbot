@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 from functools import lru_cache
 from typing import Dict, List, Optional, Set
@@ -25,7 +26,12 @@ class UserBalances:
         conn_setting = AllConnectorSettings.get_connector_settings()[exchange]
         if api_details or conn_setting.uses_gateway_generic_connector() or conn_setting.uses_hybrid_connector():
             connector_class = get_connector_class(exchange)
-            init_params = conn_setting.conn_init_parameters(api_details)
+            read_only_client_config = ReadOnlyClientConfigAdapter.lock_config(client_config_map)
+            init_params = conn_setting.conn_init_parameters(
+                trading_pairs=gateway_connector_trading_pairs(conn_setting.name),
+                api_keys=api_details,
+                client_config_map=read_only_client_config,
+            )
 
             # collect trading pairs from the gateway connector settings
             if "serum" in conn_setting.name:
@@ -48,6 +54,7 @@ class UserBalances:
                     trading_pairs.append("-".join(tokens))
 
             read_only_client_config = ReadOnlyClientConfigAdapter.lock_config(client_config_map)
+
             if "serum" in conn_setting.name:
                 init_params.update(
                     trading_pairs=hybrid_connector_trading_pairs(),
@@ -68,6 +75,7 @@ class UserBalances:
         try:
             await market._update_balances()
         except Exception as e:
+            logging.getLogger().debug(f"Failed to update balances for {market}", exc_info=True)
             return str(e)
         return None
 
