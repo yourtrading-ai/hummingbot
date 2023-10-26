@@ -126,7 +126,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return await self._get_gateway_instance().ping_gateway()
 
     def _get_exchange_trading_pair_from_market_info(self, market_info: Any) -> str:
-        return "BTC-PERP"
+        return market_info.get("name")
 
     async def get_funding_info(self, trading_pair: str) -> FundingInfo:
         last_trade_price = await self.get_last_traded_price(trading_pair)
@@ -406,7 +406,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _get_exchange_base_quote_tokens_from_market_info(self, market_info: str) -> Tuple[str, str]:
         split_name = str(market_info).split('-')
         base = split_name[0].upper()
-        quote = "PERP"
+        quote = "USDC"
         return base, quote
 
     async def _update_markets(self):
@@ -431,7 +431,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _get_trading_pair_from_market_info(self, market_info: str) -> str:
         split_name = str(market_info).split('-')
         base = split_name[0].upper()
-        quote = "USDC"
+        quote = "PERP"
         trading_pair = combine_to_hb_trading_pair(base=base, quote=quote)
         return trading_pair
 
@@ -477,6 +477,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
                     connector=self.connector_name,
                     address=self._account_id,
                     order_id=in_flight_order.exchange_order_id,
+                    market=in_flight_order.trading_pair,
                 )
 
         except OSError as e:
