@@ -22,7 +22,7 @@ from hummingbot.connector.gateway.gateway_in_flight_order import GatewayInFlight
 from hummingbot.connector.trading_rule import TradingRule, split_hb_trading_pair
 from hummingbot.connector.utils import combine_to_hb_trading_pair, get_new_numeric_client_order_id
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
-from hummingbot.core.data_type.common import OrderType, PositionAction, PositionMode, TradeType
+from hummingbot.core.data_type.common import OrderType, PositionMode
 from hummingbot.core.data_type.funding_info import FundingInfo
 from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
@@ -301,7 +301,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return snapshot_msg
 
     def get_client_order_id(
-            self, trading_pair: str, trade_type: TradeType, order_type: OrderType, position_action: PositionAction
+            self, trading_pair: str, is_buy: bool, hbot_order_id_prefix: str, max_id_len: int
     ) -> str:
         decimal_id = get_new_numeric_client_order_id(
             nonce_creator=self._client_order_id_nonce_provider,
@@ -331,6 +331,8 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         balances["BTC"]["total_balance"] = Decimal("0.001")
         balances["BTC"]["available_balance"] = Decimal("0.001")
+        balances["PERP"]["total_balance"] = Decimal("100")
+        balances["PERP"]["available_balance"] = Decimal("100")
         balances["USDC"]["total_balance"] = Decimal("100")
         balances["USDC"]["available_balance"] = Decimal("100")
 
@@ -454,12 +456,12 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         quote = "PERP"
         return TradingRule(
             trading_pair=combine_to_hb_trading_pair(base=base, quote=quote),
-            min_order_size=Decimal(0.0001),
-            min_price_increment=Decimal(0.0001),
-            min_quote_amount_increment=Decimal(0.0001),
-            min_base_amount_increment=Decimal(0.0001),
-            min_notional_size=Decimal(0.0001),
-            min_order_value=Decimal(0.0001),
+            min_order_size=Decimal(0.00001),
+            min_price_increment=Decimal(0.00001),
+            min_quote_amount_increment=Decimal(0.00001),
+            min_base_amount_increment=Decimal(0.00001),
+            min_notional_size=Decimal(0.00001),
+            min_order_value=Decimal(0.00001),
         )
 
     def is_order_not_found_during_status_update_error(self, status_update_exception: Exception) -> bool:
