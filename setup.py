@@ -38,7 +38,8 @@ def main():
     excluded_paths = ["hummingbot.connector.exchange.injective_v2",
                       "hummingbot.connector.derivative.injective_v2_perpetual",
                       "hummingbot.connector.gateway.clob_spot.data_sources.injective",
-                      "hummingbot.connector.gateway.clob_perp.data_sources.injective_perpetual"
+                      "hummingbot.connector.gateway.clob_perp.data_sources.injective_perpetual",
+                      "hummingbot.connector.gateway.clob_perp.data_sources.mango_perpetual"
                       ]
     packages = [pkg for pkg in all_packages if not any(fnmatch.fnmatch(pkg, pattern) for pattern in excluded_paths)]
     package_data = {

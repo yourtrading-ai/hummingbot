@@ -66,6 +66,7 @@ connector_status = {
     'woo_x': 'bronze',
     'woo_x_testnet': 'bronze',
     'kujira': 'bronze',
+    'mango_perp': 'bronze',
 }
 
 warning_messages = {

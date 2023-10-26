@@ -823,6 +823,7 @@ class CoinCapRateSourceMode(RateSourceModeBase):
                     "BUSD": "binance-usd",
                     "ONE": "harmony",
                     "PDEX": "polkadex",
+                    "SOL": "solana",
                 }.items()
             ]
         ),

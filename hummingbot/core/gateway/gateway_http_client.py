@@ -1135,6 +1135,35 @@ class GatewayHttpClient:
         }
         return await self.api_request("post", "clob/perp/orders", request_payload, use_body=True)
 
+    async def clob_perp_place_identifiable_order(
+        self,
+        chain: str,
+        network: str,
+        connector: str,
+        address: str,
+        trading_pair: str,
+        trade_type: TradeType,
+        order_type: OrderType,
+        price: Decimal,
+        size: Decimal,
+        leverage: int,
+        client_order_id: str
+    ) -> Dict[str, Any]:
+        request_payload = {
+            "chain": chain,
+            "network": network,
+            "connector": connector,
+            "address": address,
+            "market": trading_pair,
+            "price": str(price),
+            "amount": str(size),
+            "leverage": float(leverage),
+            "side": trade_type.name,
+            "orderType": order_type.name,
+            "clientOrderID": client_order_id
+        }
+        return await self.api_request("post", "clob/perp/orders", request_payload, use_body=True)
+
     async def clob_perp_cancel_order(
         self,
         chain: str,
