@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+from bidict import bidict
 
 from hummingbot.client.config.config_helpers import ClientConfigAdapter
 from hummingbot.connector.derivative.position import Position
@@ -18,7 +19,7 @@ from hummingbot.connector.gateway.clob_perp.data_sources.mango_perpetual.mango_p
 )
 from hummingbot.connector.gateway.common_types import CancelOrderResult, PlaceOrderResult
 from hummingbot.connector.gateway.gateway_in_flight_order import GatewayInFlightOrder
-from hummingbot.connector.trading_rule import TradingRule
+from hummingbot.connector.trading_rule import TradingRule, split_hb_trading_pair
 from hummingbot.connector.utils import combine_to_hb_trading_pair, get_new_numeric_client_order_id
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
 from hummingbot.core.data_type.common import OrderType, PositionAction, PositionMode, TradeType
@@ -55,6 +56,8 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         self._network = connector_spec["network"]
         self._account_id = connector_spec["wallet_address"]
         self._throttler = AsyncThrottler(rate_limits=CONSTANTS.RATE_LIMITS)
+        self._markets_info_lock = asyncio.Lock()
+        self._hb_to_exchange_tokens_map: bidict[str, str] = bidict()
 
         self._client_order_id_nonce_provider = NonceCreator.for_microseconds()
 
@@ -117,7 +120,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return True, ""
 
     def _check_markets_initialized(self) -> bool:
-        return True
+        return (len(self._markets_info) != 0)
 
     async def _gateway_ping_gateway(self, _request=None):
         return await self._get_gateway_instance().ping_gateway()
@@ -328,8 +331,6 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         balances["BTC"]["total_balance"] = Decimal("0.001")
         balances["BTC"]["available_balance"] = Decimal("0.001")
-        balances["PERP"]["total_balance"] = Decimal("100")
-        balances["PERP"]["available_balance"] = Decimal("100")
         balances["USDC"]["total_balance"] = Decimal("100")
         balances["USDC"]["available_balance"] = Decimal("100")
 
@@ -402,13 +403,37 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         return trade_updates
 
-    def _get_exchange_base_quote_tokens_from_market_info(self, market_info: Dict[str, Any]) -> Tuple[str, str]:
-        base = "BTC"
-        quote = "USDC"
+    def _get_exchange_base_quote_tokens_from_market_info(self, market_info: str) -> Tuple[str, str]:
+        split_name = str(market_info).split('-')
+        base = split_name[0].upper()
+        quote = "PERP"
         return base, quote
 
     async def _update_markets(self):
-        pass
+        async with self._markets_info_lock:
+            markets = await self._get_markets_info()
+            for market_info in markets.items():
+                trading_pair = self._get_trading_pair_from_market_info(market_info=market_info[0])
+                self._markets_info[trading_pair] = market_info[1]
+                base, quote = split_hb_trading_pair(trading_pair=trading_pair)
+                base_exchange, quote_exchange = self._get_exchange_base_quote_tokens_from_market_info(
+                    market_info=market_info[0]
+                )
+                self._hb_to_exchange_tokens_map[base] = base_exchange
+                self._hb_to_exchange_tokens_map[quote] = quote_exchange
+
+    async def _get_markets_info(self) -> Dict[str, Any]:
+        resp = await self._get_gateway_instance().get_clob_markets(
+            connector=self.connector_name, chain=self._chain, network=self._network
+        )
+        return resp.get("markets")
+
+    def _get_trading_pair_from_market_info(self, market_info: str) -> str:
+        split_name = str(market_info).split('-')
+        base = split_name[0].upper()
+        quote = "USDC"
+        trading_pair = combine_to_hb_trading_pair(base=base, quote=quote)
+        return trading_pair
 
     def _get_maker_taker_exchange_fee_rates_from_market_info(
             self, market_info: Dict[str, Any]
@@ -424,8 +449,9 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return maker_taker_exchange_fee_rates
 
     def _parse_trading_rule(self, trading_pair: str, market_info: Dict[str, Any]) -> TradingRule:
-        base = market_info["baseCurrency"].upper()
-        quote = market_info["quoteCurrency"].upper()
+        split_name = str(market_info.get("name")).split('-')
+        base = split_name[0].upper()
+        quote = "PERP"
         return TradingRule(
             trading_pair=combine_to_hb_trading_pair(base=base, quote=quote),
             min_order_size=Decimal(0.0001),
