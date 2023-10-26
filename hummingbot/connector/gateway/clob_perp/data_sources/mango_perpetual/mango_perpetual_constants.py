@@ -25,7 +25,7 @@ ORDER_SIDE_MAP = {
 }
 
 CHAIN_RPC_LIMIT_ID = "ChainRPCLimitID"
-CHAIN_RPC_LIMIT = 30
+CHAIN_RPC_LIMIT = 15
 
 RATE_LIMITS = [
     RateLimit(limit_id=CHAIN_RPC_LIMIT_ID, limit=CHAIN_RPC_LIMIT, time_interval=MINUTE)
