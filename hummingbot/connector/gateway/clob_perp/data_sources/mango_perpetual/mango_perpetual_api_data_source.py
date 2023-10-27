@@ -436,9 +436,9 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         # Currently, trading fees on XRPL dex are not following maker/taker model, instead they based on transfer fees
         # https://xrpl.org/transfer-fees.html
         maker_taker_exchange_fee_rates = MakerTakerExchangeFeeRates(
-            maker=Decimal(0),
-            taker=Decimal(0),
-            maker_flat_fees=[],
+            maker=Decimal(market_info["makerFee"]),
+            taker=Decimal(market_info["takerFee"]),
+            maker_flat_fees=[],  # TODO: Add solana flat fees
             taker_flat_fees=[],
         )
         return maker_taker_exchange_fee_rates
