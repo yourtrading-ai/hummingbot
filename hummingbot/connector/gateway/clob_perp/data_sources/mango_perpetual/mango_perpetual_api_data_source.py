@@ -117,6 +117,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         """
         Leverage is set on a per order basis. See place_order()
         """
+        # TODO: Implement this as default leverage
         return True, ""
 
     def _check_markets_initialized(self) -> bool:
@@ -325,8 +326,6 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         balances["BTC"]["total_balance"] = Decimal("0.001")
         balances["BTC"]["available_balance"] = Decimal("0.001")
-        balances["PERP"]["total_balance"] = Decimal("100")
-        balances["PERP"]["available_balance"] = Decimal("100")
         balances["USDC"]["total_balance"] = Decimal("100")
         balances["USDC"]["available_balance"] = Decimal("100")
 
@@ -419,7 +418,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
                 self._hb_to_exchange_tokens_map[quote] = quote_exchange
 
     async def _get_markets_info(self) -> Dict[str, Any]:
-        resp = await self._get_gateway_instance().get_clob_markets(
+        resp = await self._get_gateway_instance().get_perp_markets(
             connector=self.connector_name, chain=self._chain, network=self._network
         )
         return resp.get("markets")
@@ -445,17 +444,15 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return maker_taker_exchange_fee_rates
 
     def _parse_trading_rule(self, trading_pair: str, market_info: Dict[str, Any]) -> TradingRule:
-        split_name = str(market_info.get("name")).split("-")
+        split_name = market_info["name"].split("-")
         base = split_name[0].upper()
         quote = "PERP"
         return TradingRule(
             trading_pair=combine_to_hb_trading_pair(base=base, quote=quote),
-            min_order_size=Decimal(0.00001),
-            min_price_increment=Decimal(0.00001),
-            min_quote_amount_increment=Decimal(0.00001),
-            min_base_amount_increment=Decimal(0.00001),
-            min_notional_size=Decimal(0.00001),
-            min_order_value=Decimal(0.00001),
+            min_order_size=Decimal(market_info['minOrderSize']),
+            min_price_increment=Decimal(market_info['tickSize']),
+            min_quote_amount_increment=Decimal(market_info['minQuoteAmountIncrement']),
+            min_base_amount_increment=Decimal(market_info['minBaseAmountIncrement'])
         )
 
     def is_order_not_found_during_status_update_error(self, status_update_exception: Exception) -> bool:
