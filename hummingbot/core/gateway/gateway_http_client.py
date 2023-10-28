@@ -1043,6 +1043,7 @@ class GatewayHttpClient:
         market: str,
         address: str = None,
         order_id: Optional[str] = None,
+        client_order_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         request = {
             "chain": chain,
@@ -1056,6 +1057,9 @@ class GatewayHttpClient:
 
         if order_id is not None:
             request["orderId"] = order_id
+
+        if client_order_id is not None:
+            request["clientOrderId"] = client_order_id
 
         return await self.api_request("get", "clob/perp/orders", request)
 
@@ -1160,7 +1164,7 @@ class GatewayHttpClient:
             "leverage": float(leverage),
             "side": trade_type.name,
             "orderType": order_type.name,
-            "clientOrderID": client_order_id
+            "clientOrderId": client_order_id
         }
         return await self.api_request("post", "clob/perp/orders", request_payload, use_body=True)
 
