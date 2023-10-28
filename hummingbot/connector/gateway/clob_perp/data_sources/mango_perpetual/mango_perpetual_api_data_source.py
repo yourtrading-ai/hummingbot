@@ -319,6 +319,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             connector=self.connector_name,
         )
         balances = defaultdict(dict)
+        print(result)
 
         for token, value in result["balances"].items():
             client_token = self._hb_to_exchange_tokens_map.inverse[token]
@@ -348,6 +349,8 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             )
 
         last_traded_price = Decimal(resp.get("lastTradePrice"))
+
+        print(last_traded_price)
 
         return last_traded_price
 
@@ -425,7 +428,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _get_trading_pair_from_market_info(self, market_info: str) -> str:
         split_name = str(market_info).split("-")
         base = split_name[0].upper()
-        quote = "PERP"
+        quote = "USDC"
         trading_pair = combine_to_hb_trading_pair(base=base, quote=quote)
         return trading_pair
 
