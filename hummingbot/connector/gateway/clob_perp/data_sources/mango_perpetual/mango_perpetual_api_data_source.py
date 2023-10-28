@@ -166,13 +166,13 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         )
 
         transaction_hash: Optional[str] = order_result.get("txHash")
-        identified_orders: Optional[List[Dict[str, Any]]] = order_result.get("identifiedOrders")
+        identified_orders: Optional[List[str]] = order_result.get("exchangeOrderId")
 
         if transaction_hash is None:
             await self._on_create_order_transaction_failure(order=order, order_result=order_result)
 
         transaction_hash = transaction_hash.lower()
-        exchange_order_id = identified_orders[0].get("exchangeOrderId")
+        exchange_order_id = identified_orders[0]
 
         misc_updates = {
             "creation_transaction_hash": transaction_hash,
@@ -219,8 +219,8 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         if transaction_hash in [None, ""]:
             raise ValueError(
-                f"The cancelation transaction for {order.client_order_id} failed. Please ensure there is sufficient"
-                f" INJ in the bank to cover transaction fees."
+                f"The cancellation transaction for {order.client_order_id} failed. Please ensure there is sufficient"
+                f" SOL in the bank to cover transaction fees."
             )
 
         self.logger().debug(
@@ -228,9 +228,9 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             f" with order hash {order.exchange_order_id} and tx hash {transaction_hash}."
         )
 
-        transaction_hash = f"0x{transaction_hash.lower()}"
+        transaction_hash = transaction_hash.lower()
 
-        misc_updates = {"cancelation_transaction_hash": transaction_hash}
+        misc_updates = {"cancellation_transaction_hash": transaction_hash}
 
         return True, misc_updates
 
@@ -266,7 +266,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
                         client_order_id=order.client_order_id,
                         trading_pair=order.trading_pair,
                         misc_updates={
-                            "cancelation_transaction_hash": misc_updates["cancelation_transaction_hash"],
+                            "cancelation_transaction_hash": misc_updates["cancellation_transaction_hash"],
                         },
                         exception=exception,
                     )
@@ -379,10 +379,10 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             return []
 
         order = orders[0]
-
+        exchange_order_id = order.get("exchangeOrderId")
         trade_updates = []
         fill_price = Decimal(order["fillPrice"])
-        fill_size = in_flight_order.amount - Decimal(order["filledAmount"])
+        fill_size = Decimal(order["filledAmount"])
         fee_token = "USDC"  # TODO: get fee token and fee amount from gateway sid
         fee = TradeFeeBase.new_spot_fee(
             fee_schema=TradeFeeSchema(),
@@ -392,7 +392,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         trade_update = TradeUpdate(
             trade_id=f"{int(time.time())}",
             client_order_id=in_flight_order.client_order_id,
-            exchange_order_id=order["exchangeOrderId"],
+            exchange_order_id=exchange_order_id,
             trading_pair=in_flight_order.trading_pair,
             fill_timestamp=int(time.time()),
             fill_price=fill_price,
@@ -502,7 +502,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
                 update_timestamp=pd.Timestamp(resp["timestamp"]).timestamp(),
                 new_state=MANGO_DERIVATIVE_ORDER_STATES[orders[0]["status"]],
                 client_order_id=in_flight_order.client_order_id,
-                exchange_order_id=orders[0]["exchangeOrderId"],
+                exchange_order_id=orders[0].get("exchangeOrderId"),
             )
 
         return status_update
