@@ -80,7 +80,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         await super().stop()
 
     def get_supported_order_types(self) -> List[OrderType]:
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
+        return [OrderType.LIMIT, OrderType.LIMIT_MAKER, OrderType.MARKET]
 
     def supported_position_modes(self) -> List[PositionMode]:
         return [PositionMode.ONEWAY]
@@ -309,31 +309,24 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return f"{decimal_id}"
 
     async def get_account_balances(self) -> Dict[str, Dict[str, Decimal]]:
-        # TODO: Remove fake data and add real balance
         self._check_markets_initialized() or await self._update_markets()
 
-        # result = await self._get_gateway_instance().get_balances(
-        #     chain=self.chain,
-        #     network=self._network,
-        #     address=self._account_id,
-        #     token_symbols=list(self._hb_to_exchange_tokens_map.values()),
-        #     connector=self.connector_name,
-        # )
+        result = await self._get_gateway_instance().get_balances(
+            chain=self._chain,
+            network=self._network,
+            address=self._account_id,
+            token_symbols=list(self._hb_to_exchange_tokens_map.values()),
+            connector=self.connector_name,
+        )
         balances = defaultdict(dict)
+        print(result)
 
-        # for token, value in result["balances"].items():
-        #     client_token = self._hb_to_exchange_tokens_map.inverse[token]
-        #     balance_value = Decimal(value)
-        #     if balance_value != 0:
-        #         balances[client_token]["total_balance"] = balance_value
-        #         balances[client_token]["available_balance"] = balance_value
-
-        balances["BTC"]["total_balance"] = Decimal("0.001")
-        balances["BTC"]["available_balance"] = Decimal("0.001")
-        balances["PERP"]["total_balance"] = Decimal("100")
-        balances["PERP"]["available_balance"] = Decimal("100")
-        balances["USDC"]["total_balance"] = Decimal("100")
-        balances["USDC"]["available_balance"] = Decimal("100")
+        for token, value in result["balances"].items():
+            client_token = self._hb_to_exchange_tokens_map.inverse[token]
+            balance_value = Decimal(value)
+            if balance_value != 0:
+                balances[client_token]["total_balance"] = balance_value
+                balances[client_token]["available_balance"] = balance_value
 
         return balances
 
@@ -356,6 +349,8 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             )
 
         last_traded_price = Decimal(resp.get("lastTradePrice"))
+
+        print(last_traded_price)
 
         return last_traded_price
 
@@ -408,7 +403,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _get_exchange_base_quote_tokens_from_market_info(self, market_info: str) -> Tuple[str, str]:
         split_name = str(market_info).split("-")
         base = split_name[0].upper()
-        quote = "PERP"
+        quote = "USDC"
         return base, quote
 
     async def _update_markets(self):
@@ -433,7 +428,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _get_trading_pair_from_market_info(self, market_info: str) -> str:
         split_name = str(market_info).split("-")
         base = split_name[0].upper()
-        quote = "PERP"
+        quote = "USDC"
         trading_pair = combine_to_hb_trading_pair(base=base, quote=quote)
         return trading_pair
 
