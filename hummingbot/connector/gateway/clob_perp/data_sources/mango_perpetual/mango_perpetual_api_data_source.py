@@ -22,7 +22,7 @@ from hummingbot.connector.gateway.gateway_in_flight_order import GatewayInFlight
 from hummingbot.connector.trading_rule import TradingRule, split_hb_trading_pair
 from hummingbot.connector.utils import combine_to_hb_trading_pair, get_new_numeric_client_order_id
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
-from hummingbot.core.data_type.common import OrderType, PositionMode
+from hummingbot.core.data_type.common import OrderType, PositionMode, PositionSide
 from hummingbot.core.data_type.funding_info import FundingInfo
 from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
@@ -43,10 +43,10 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     _logger: Optional[HummingbotLogger] = None
 
     def __init__(
-        self,
-        trading_pairs: List[str],
-        connector_spec: Dict[str, Any],
-        client_config_map: ClientConfigAdapter,
+            self,
+            trading_pairs: List[str],
+            connector_spec: Dict[str, Any],
+            client_config_map: ClientConfigAdapter,
     ):
         super().__init__(
             trading_pairs=trading_pairs, connector_spec=connector_spec, client_config_map=client_config_map
@@ -111,7 +111,30 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return timestamp, funding_rate, payment
 
     async def fetch_positions(self) -> List[Position]:
-        return []
+        resp = await self._get_gateway_instance().clob_perp_positions(
+            connector=self.connector_name, chain=self._chain, network=self._network, trading_pairs=[],
+            address=self._account_id
+        )
+
+        positions = resp.get("positions")
+
+        if len(positions) == 0:
+            return []
+
+        # Map position into array of Position objects
+        positions = [
+            Position(
+                trading_pair=position["market"].replace("PERP", "USDC"),
+                position_side=PositionSide.LONG if position["side"] == "LONG" else PositionSide.SHORT,
+                unrealized_pnl=Decimal(position["unrealizedPnl"]),
+                entry_price=Decimal(position["averageEntryPrice"]),
+                amount=Decimal(position["amount"]),
+                leverage=Decimal(position["leverage"]),
+            )
+            for position in positions
+        ]
+
+        return positions
 
     async def set_trading_pair_leverage(self, trading_pair: str, leverage: int) -> Tuple[bool, str]:
         """
@@ -134,7 +157,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         last_trade_price = await self.get_last_traded_price(trading_pair)
 
         funding_info = FundingInfo(
-            trading_pair=self._convert_trading_pair(trading_pair),
+            trading_pair=trading_pair,
             index_price=last_trade_price,  # Default to using last trade price
             mark_price=last_trade_price,
             next_funding_utc_timestamp=(int(self._time() * 1e-3) * 2),
@@ -149,7 +172,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return True, ""
 
     async def place_order(
-        self, order: GatewayInFlightOrder, **kwargs
+            self, order: GatewayInFlightOrder, **kwargs
     ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         order_result = await self._get_gateway_instance().clob_perp_place_identifiable_order(
             connector=self._connector_name,
@@ -423,7 +446,14 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         resp = await self._get_gateway_instance().get_clob_markets(
             connector=self.connector_name, chain=self._chain, network=self._network
         )
-        return resp.get("markets")
+
+        markets = resp.get("markets")
+
+        # Change the key from BTC-PERP to BTC-USDC
+        for key in list(markets.keys()):
+            markets[key.replace("PERP", "USDC")] = markets.pop(key)
+
+        return markets
 
     def _get_trading_pair_from_market_info(self, market_info: str) -> str:
         split_name = str(market_info).split("-")
@@ -433,7 +463,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return trading_pair
 
     def _get_maker_taker_exchange_fee_rates_from_market_info(
-        self, market_info: Dict[str, Any]
+            self, market_info: Dict[str, Any]
     ) -> MakerTakerExchangeFeeRates:
         # Currently, trading fees on XRPL dex are not following maker/taker model, instead they based on transfer fees
         # https://xrpl.org/transfer-fees.html
@@ -448,7 +478,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def _parse_trading_rule(self, trading_pair: str, market_info: Dict[str, Any]) -> TradingRule:
         split_name = market_info["name"].split("-")
         base = split_name[0].upper()
-        quote = "PERP"
+        quote = "USDC"
         return TradingRule(
             trading_pair=combine_to_hb_trading_pair(base=base, quote=quote),
             min_order_size=Decimal(market_info["miniumOrderSize"]),
@@ -468,16 +498,16 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         #       order state. Once we get exchange_order_id, we will use it to track order state.
         #       Implement a quick way to manage order state on gateway side.
         try:
-            async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
-                resp = await self._get_gateway_instance().clob_perp_get_orders(
-                    chain=self._chain,
-                    network=self._network,
-                    connector=self.connector_name,
-                    address=self._account_id,
-                    order_id=in_flight_order.exchange_order_id,  # TODO: if exchange_order_id, provide client_order_id
-                    client_order_id=in_flight_order.client_order_id,
-                    market=self._convert_trading_pair(in_flight_order.trading_pair),
-                )
+            # async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
+            resp = await self._get_gateway_instance().clob_perp_get_orders(
+                chain=self._chain,
+                network=self._network,
+                connector=self.connector_name,
+                address=self._account_id,
+                order_id=in_flight_order.exchange_order_id,  # TODO: if exchange_order_id, provide client_order_id
+                client_order_id=in_flight_order.client_order_id,
+                market=self._convert_trading_pair(in_flight_order.trading_pair),
+            )
 
         except OSError as e:
             if "HTTP status is 404" in str(e):
@@ -509,7 +539,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         )
 
     async def _on_cancel_order_transaction_failure(
-        self, order: GatewayInFlightOrder, cancelation_result: Dict[str, Any]
+            self, order: GatewayInFlightOrder, cancelation_result: Dict[str, Any]
     ):
         raise ValueError(
             f"The cancelation transaction for {order.client_order_id} failed. Please ensure you have sufficient"
