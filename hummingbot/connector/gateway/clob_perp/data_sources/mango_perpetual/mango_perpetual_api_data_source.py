@@ -27,8 +27,10 @@ from hummingbot.core.data_type.funding_info import FundingInfo
 from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_message import OrderBookMessage, OrderBookMessageType
 from hummingbot.core.data_type.trade_fee import MakerTakerExchangeFeeRates, TokenAmount, TradeFeeBase, TradeFeeSchema
-from hummingbot.core.event.events import (  # AccountEvent,; BalanceUpdateEvent,; OrderBookDataSourceEvent,; PositionUpdateEvent,
+from hummingbot.core.event.events import (  # ,; BalanceUpdateEvent,; OrderBookDataSourceEvent,; PositionUpdateEvent,
+    AccountEvent,
     MarketEvent,
+    PositionUpdateEvent,
 )
 from hummingbot.core.gateway.gateway_http_client import GatewayHttpClient
 from hummingbot.core.network_iterator import NetworkStatus
@@ -80,13 +82,13 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         await super().stop()
 
     def get_supported_order_types(self) -> List[OrderType]:
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER, OrderType.MARKET]
+        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
 
     def supported_position_modes(self) -> List[PositionMode]:
         return [PositionMode.ONEWAY]
 
     def supported_stream_events(self) -> List[Enum]:
-        return []
+        return [AccountEvent.PositionUpdate,]
 
     async def check_network_status(self) -> NetworkStatus:
         # self.logger().debug("check_network_status: start")
@@ -117,13 +119,15 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         )
 
         positions = resp.get("positions")
+        timestamp = resp.get("timestamp")
 
         if len(positions) == 0:
             return []
 
-        # Map position into array of Position objects
-        positions = [
-            Position(
+        # Map positions into events
+        position_events = [
+            PositionUpdateEvent(
+                timestamp=timestamp,
                 trading_pair=position["market"].replace("PERP", "USDC"),
                 position_side=PositionSide.LONG if position["side"] == "LONG" else PositionSide.SHORT,
                 unrealized_pnl=Decimal(position["unrealizedPnl"]),
@@ -134,7 +138,23 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             for position in positions
         ]
 
-        return positions
+        # Map position into array of Position objects
+        positions_parsed = [
+            Position(
+                trading_pair=position_event.trading_pair,
+                position_side=position_event.position_side,
+                unrealized_pnl=position_event.unrealized_pnl,
+                entry_price=position_event.entry_price,
+                amount=position_event.amount,
+                leverage=position_event.leverage,
+            )
+            for position_event in position_events
+        ]
+
+        # For each position, trigger an event
+        for position_event in position_events:
+            self._publisher.trigger_event(event_tag=AccountEvent.PositionUpdate, message=position_event)
+        return positions_parsed
 
     async def set_trading_pair_leverage(self, trading_pair: str, leverage: int) -> Tuple[bool, str]:
         """
@@ -298,13 +318,13 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return cancel_order_results
 
     async def get_order_book_snapshot(self, trading_pair: str) -> OrderBookMessage:
-        async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
-            data = await self._get_gateway_instance().get_clob_orderbook_snapshot(
-                trading_pair=self._convert_trading_pair(trading_pair),
-                connector=self.connector_name,
-                chain=self._chain,
-                network=self._network,
-            )
+        # async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
+        data = await self._get_gateway_instance().get_clob_orderbook_snapshot(
+            trading_pair=self._convert_trading_pair(trading_pair),
+            connector=self.connector_name,
+            chain=self._chain,
+            network=self._network,
+        )
 
         bids = [
             (Decimal(bid["price"]), Decimal(bid["quantity"])) for bid in data["buys"] if Decimal(bid["quantity"]) != 0
@@ -327,7 +347,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
     def get_client_order_id(self, trading_pair: str, is_buy: bool, hbot_order_id_prefix: str, max_id_len: int) -> str:
         decimal_id = get_new_numeric_client_order_id(
             nonce_creator=self._client_order_id_nonce_provider,
-            max_id_bit_count=16,
+            max_id_bit_count=32,
         )
         return f"{decimal_id}"
 
@@ -342,8 +362,6 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             connector=self.connector_name,
         )
         balances = defaultdict(dict)
-        print(result)
-
         for token, value in result["balances"].items():
             client_token = self._hb_to_exchange_tokens_map.inverse[token]
             balance_value = Decimal(value)
@@ -354,7 +372,12 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return balances
 
     async def get_order_status_update(self, in_flight_order: GatewayInFlightOrder) -> OrderUpdate:
+        # print("request update for in_flight_order: ", in_flight_order.client_order_id)
+
         status_update = await self._get_order_status_update_with_order_id(in_flight_order=in_flight_order)
+
+        # print("status_update: ", status_update)
+
         self._publisher.trigger_event(event_tag=MarketEvent.OrderUpdate, message=status_update)
 
         if status_update is None:
@@ -363,33 +386,30 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
         return status_update
 
     async def get_last_traded_price(self, trading_pair: str) -> Decimal:
-        async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
-            resp = await self._get_gateway_instance().clob_perp_last_trade_price(
-                chain=self._chain,
-                connector=self.connector_name,
-                network=self._network,
-                trading_pair=self._convert_trading_pair(trading_pair),
-            )
+        # async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
+        resp = await self._get_gateway_instance().clob_perp_last_trade_price(
+            chain=self._chain,
+            connector=self.connector_name,
+            network=self._network,
+            trading_pair=self._convert_trading_pair(trading_pair),
+        )
 
         last_traded_price = Decimal(resp.get("lastTradePrice"))
-
-        print(last_traded_price)
-
         return last_traded_price
 
     async def get_all_order_fills(self, in_flight_order: GatewayInFlightOrder) -> List[TradeUpdate]:
         self._check_markets_initialized() or await self._update_markets()
 
-        async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
-            resp = await self._get_gateway_instance().clob_perp_get_orders(
-                market=self._convert_trading_pair(in_flight_order.trading_pair),
-                chain=self._chain,
-                network=self._network,
-                connector=self.connector_name,
-                address=self._account_id,
-                order_id=in_flight_order.exchange_order_id,
-                client_order_id=in_flight_order.client_order_id,
-            )
+        # async with self._throttler.execute_task(limit_id=CONSTANTS.CHAIN_RPC_LIMIT_ID):
+        resp = await self._get_gateway_instance().clob_perp_get_orders(
+            market=self._convert_trading_pair(in_flight_order.trading_pair),
+            chain=self._chain,
+            network=self._network,
+            connector=self.connector_name,
+            address=self._account_id,
+            order_id=in_flight_order.exchange_order_id,
+            client_order_id=in_flight_order.client_order_id,
+        )
 
         orders = resp.get("orders")
 
@@ -398,30 +418,28 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
 
         order = orders[0]
         exchange_order_id = order.get("exchangeOrderId")
-        trade_updates = []
-        fill_price = Decimal(order["fillPrice"])
-        fill_size = Decimal(order["filledAmount"])
-        fee_token = "USDC"  # TODO: get fee token and fee amount from gateway sid
-        fee = TradeFeeBase.new_spot_fee(
-            fee_schema=TradeFeeSchema(),
-            trade_type=ORDER_SIDE_MAP[order["side"]],
-            flat_fees=[TokenAmount(token=fee_token, amount=Decimal(0))],
-        )
-        trade_update = TradeUpdate(
-            trade_id=f"{int(time.time())}",
-            client_order_id=in_flight_order.client_order_id,
-            exchange_order_id=exchange_order_id,
-            trading_pair=in_flight_order.trading_pair,
-            fill_timestamp=int(time.time()),
-            fill_price=fill_price,
-            fill_base_amount=fill_size,
-            fill_quote_amount=fill_price * fill_size,
-            fee=fee,
-            is_taker=False,
-        )
-        trade_updates.append(trade_update)
+        trade_updates = order.get("fills")
+        mapped_trade_updates = [
+            TradeUpdate(
+                trade_id=trade_update.get("timestamp"),
+                client_order_id=in_flight_order.client_order_id,
+                exchange_order_id=exchange_order_id,
+                trading_pair=in_flight_order.trading_pair,
+                fill_timestamp=int(trade_update.get("timestamp")),
+                fill_price=Decimal(trade_update.get("price")),
+                fill_base_amount=Decimal(trade_update.get("quantity")),
+                fill_quote_amount=Decimal(trade_update.get("price")) * Decimal(trade_update.get("quantity")),
+                fee=TradeFeeBase.new_spot_fee(
+                    fee_schema=TradeFeeSchema(),
+                    trade_type=ORDER_SIDE_MAP[order.get("side")],
+                    flat_fees=[TokenAmount(token="USDC", amount=Decimal(trade_update.get("fee")))],
+                ),
+                is_taker=True,
+            )
+            for trade_update in trade_updates
+        ]
 
-        return trade_updates
+        return mapped_trade_updates
 
     def _get_exchange_base_quote_tokens_from_market_info(self, market_info: str) -> Tuple[str, str]:
         split_name = str(market_info).split("-")
@@ -520,7 +538,7 @@ class MangoPerpetualAPIDataSource(CLOBPerpAPIDataSourceBase):
             orders = resp.get("orders")
 
             if len(orders) == 0:
-                return None
+                raise ValueError(f"No update found for order {in_flight_order.client_order_id}.")
 
             status_update = OrderUpdate(
                 trading_pair=in_flight_order.trading_pair,
