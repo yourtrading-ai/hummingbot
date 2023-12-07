@@ -63,7 +63,7 @@ connector_status = {
     'vvs': 'bronze',
     'woo_x': 'bronze',
     'woo_x_testnet': 'bronze',
-    'mango_perp': 'bronze',
+    'mango_perpetual': 'bronze',
     'xswap': 'bronze',
 }
 
