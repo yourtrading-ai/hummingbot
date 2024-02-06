@@ -46,7 +46,7 @@ def load_parser(hummingbot: "HummingbotApplication", command_tabs) -> [ThrowingA
     connect_parser.set_defaults(func=hummingbot.connect)
 
     create_parser = subparsers.add_parser("create", help="Create a new bot")
-    create_parser.add_argument("file_name", nargs="?", default=None, help="Name of the configuration file")
+    create_parser.add_argument("--script-config", dest="script_to_config", nargs="?", default=None, help="Name of the v2 strategy")
     create_parser.set_defaults(func=hummingbot.create)
 
     import_parser = subparsers.add_parser("import", help="Import an existing bot by loading the configuration file")
@@ -71,6 +71,7 @@ def load_parser(hummingbot: "HummingbotApplication", command_tabs) -> [ThrowingA
     start_parser = subparsers.add_parser("start", help="Start the current bot")
     # start_parser.add_argument("--log-level", help="Level of logging")
     start_parser.add_argument("--script", type=str, dest="script", help="Script strategy file name")
+    start_parser.add_argument("--conf", type=str, dest="conf", help="Script config file name")
 
     start_parser.set_defaults(func=hummingbot.start)
 
@@ -106,7 +107,7 @@ def load_parser(hummingbot: "HummingbotApplication", command_tabs) -> [ThrowingA
     gateway_connect_parser.set_defaults(func=hummingbot.gateway_connect)
 
     gateway_connector_tokens_parser = gateway_subparsers.add_parser("connector-tokens", help="Report token balances for gateway connectors")
-    gateway_connector_tokens_parser.add_argument("connector_chain_network", nargs="?", default=None, help="Name of connector you want to edit reported tokens for")
+    gateway_connector_tokens_parser.add_argument("chain_network", nargs="?", default=None, help="Name of chain_network you want to edit reported tokens for")
     gateway_connector_tokens_parser.add_argument("new_tokens", nargs="?", default=None, help="Report balance of these tokens - separate multiple tokens with commas (,)")
     gateway_connector_tokens_parser.set_defaults(func=hummingbot.gateway_connector_tokens)
 
