@@ -70,7 +70,7 @@ class PositionExecutor(SmartComponentBase):
 
     @property
     def is_perpetual(self):
-        return self.exchange.split("_")[-1] == "perpetual"
+        return "perpetual" in self.exchange
 
     @property
     def position_config(self):
@@ -94,8 +94,8 @@ class PositionExecutor(SmartComponentBase):
 
     @property
     def entry_price(self):
-        if self.open_order.average_executed_price:
-            return self.open_order.average_executed_price
+        if self.open_order.executed_price:
+            return self.open_order.executed_price
         elif self.position_config.entry_price:
             return self.position_config.entry_price
         else:
@@ -108,13 +108,14 @@ class PositionExecutor(SmartComponentBase):
 
     @property
     def close_price(self):
-        if self.executor_status == PositionExecutorStatus.NOT_STARTED or self.close_type in [CloseType.EXPIRED, CloseType.INSUFFICIENT_BALANCE]:
-            return self.entry_price
+        if self.executor_status == PositionExecutorStatus.COMPLETED and self.close_type not in [CloseType.EXPIRED,
+                                                                                                CloseType.INSUFFICIENT_BALANCE]:
+            return self.close_order.executed_price
         elif self.executor_status == PositionExecutorStatus.ACTIVE_POSITION:
             price_type = PriceType.BestBid if self.side == TradeType.BUY else PriceType.BestAsk
             return self.get_price(self.exchange, self.trading_pair, price_type=price_type)
         else:
-            return self.close_order.average_executed_price
+            return self.entry_price
 
     @property
     def trade_pnl(self):
@@ -396,17 +397,17 @@ class PositionExecutor(SmartComponentBase):
             "net_pnl_quote": self.net_pnl_quote,
             "net_pnl": self.net_pnl,
             "close_timestamp": self.close_timestamp,
-            "executor_status": self.executor_status,
+            "executor_status": self.executor_status.name,
             "close_type": self.close_type.name if self.close_type else None,
             "entry_price": self.entry_price,
             "close_price": self.close_price,
             "sl": self.position_config.stop_loss,
             "tp": self.position_config.take_profit,
             "tl": self.position_config.time_limit,
-            "open_order_type": self.open_order_type,
-            "take_profit_order_type": self.take_profit_order_type,
-            "stop_loss_order_type": self.stop_loss_order_type,
-            "time_limit_order_type": self.time_limit_order_type,
+            "open_order_type": self.open_order_type.name,
+            "take_profit_order_type": self.take_profit_order_type.name,
+            "stop_loss_order_type": self.stop_loss_order_type.name,
+            "time_limit_order_type": self.time_limit_order_type.name,
             "leverage": self.position_config.leverage,
         }
 
