@@ -50,6 +50,12 @@ price_floor: null
 # enable moving price floor and ceiling.
 moving_price_band_enabled: null
 
+# enable augmented price floor and ceiling.
+aug_price_band_enabled: null
+
+# enable augmented moving price floor and ceiling.
+aug_moving_price_band_enabled: null
+
 # Price band ceiling pct.
 price_ceiling_pct: null
 

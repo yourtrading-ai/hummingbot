@@ -85,7 +85,9 @@ cdef class PureMarketMakingStrategy(StrategyBase):
                     bid_order_level_spreads: List[Decimal] = None,
                     ask_order_level_spreads: List[Decimal] = None,
                     should_wait_order_cancel_confirmation: bool = True,
-                    moving_price_band: Optional[MovingPriceBand] = None
+                    moving_price_band: Optional[MovingPriceBand] = None,
+                    aug_price_band_enabled: bool = False,
+                    aug_moving_price_band_enabled: bool = False,
                     ):
         if order_override is None:
             order_override = {}
@@ -145,6 +147,12 @@ cdef class PureMarketMakingStrategy(StrategyBase):
         self._should_wait_order_cancel_confirmation = should_wait_order_cancel_confirmation
         self._moving_price_band = moving_price_band
         self.c_add_markets([market_info.market])
+        self._aug_price_band_enabled = aug_price_band_enabled
+        self._aug_moving_price_band_enabled = aug_moving_price_band_enabled
+        self._aug_price_ceiling_flag = False
+        self._aug_price_floor_flag = False
+        self._aug_mov_price_ceiling_flag = False
+        self._aug_mov_price_floor_flag = False
 
     def all_markets_ready(self):
         return all([market.ready for market in self._sb_markets])
@@ -409,6 +417,14 @@ cdef class PureMarketMakingStrategy(StrategyBase):
     @property
     def moving_price_band(self) -> MovingPriceBand:
         return self._moving_price_band
+
+    @property
+    def aug_price_band_enabled(self) -> bool:
+        return self._aug_price_band_enabled
+
+    @property
+    def aug_moving_price_band_enabled(self) -> bool:
+        return self._aug_moving_price_band_enabled
 
     def get_price(self) -> Decimal:
         price_provider = self._asset_price_delegate or self._market_info
@@ -848,8 +864,20 @@ cdef class PureMarketMakingStrategy(StrategyBase):
     cdef c_apply_price_band(self, proposal):
         if self._price_ceiling > 0 and self.get_price() >= self._price_ceiling:
             proposal.buys = []
+            if not self._aug_price_ceiling_flag and self.aug_price_band_enabled:
+                self._aug_price_ceiling_flag = True
+                self.notify_hb_app_with_timestamp(f"Augmented Price ceiling reached at {self._price_ceiling}.")
         if self._price_floor > 0 and self.get_price() <= self._price_floor:
             proposal.sells = []
+            if not self._aug_price_floor_flag and self.aug_price_band_enabled:
+                self._aug_price_floor_flag = True
+                self.notify_hb_app_with_timestamp(f"Augmented Price floor reached at {self._price_floor}.")
+
+        if self.aug_price_band_enabled:
+            if self._aug_price_ceiling_flag:
+                proposal.buys = []
+            if self._aug_price_floor_flag:
+                proposal.sells = []
 
     cdef c_apply_moving_price_band(self, proposal):
         price = self.get_price()
@@ -857,8 +885,20 @@ cdef class PureMarketMakingStrategy(StrategyBase):
             self.current_timestamp, price)
         if self._moving_price_band.check_price_ceiling_exceeded(price):
             proposal.buys = []
+            if not self._aug_mov_price_ceiling_flag and self.aug_moving_price_band_enabled:
+                self._aug_mov_price_ceiling_flag = True
+                self.notify_hb_app_with_timestamp(f"Augmented Moving Price ceiling reached at {price}.")
         if self._moving_price_band.check_price_floor_exceeded(price):
             proposal.sells = []
+            if not self._aug_mov_price_floor_flag and self.aug_moving_price_band_enabled:
+                self._aug_mov_price_floor_flag = True
+                self.notify_hb_app_with_timestamp(f"Augmented Moving Price floor reached at {price}.")
+
+        if self.aug_moving_price_band_enabled:
+            if self._aug_mov_price_ceiling_flag:
+                proposal.buys = []
+            if self._aug_price_floor_flag:
+                proposal.sells = []
 
     cdef c_apply_ping_pong(self, object proposal):
         self._ping_pong_warning_lines = []

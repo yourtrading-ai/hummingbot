@@ -59,6 +59,13 @@ cdef class PureMarketMakingStrategy(StrategyBase):
 
         object _moving_price_band
 
+        bint _aug_price_band_enabled
+        bint _aug_moving_price_band_enabled
+        bint _aug_price_ceiling_flag
+        bint _aug_price_floor_flag
+        bint _aug_mov_price_ceiling_flag
+        bint _aug_mov_price_floor_flag
+
     cdef object c_get_mid_price(self)
     cdef object c_create_base_proposal(self)
     cdef tuple c_get_adjusted_available_balance(self, list orders)

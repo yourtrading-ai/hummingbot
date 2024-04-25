@@ -195,6 +195,18 @@ pure_market_making_config_map = {
                   type_str="decimal",
                   default=Decimal("-1"),
                   validator=validate_price_floor_ceiling),
+    "aug_price_band_enabled":
+        ConfigVar(key="aug_price_band_enabled",
+                  prompt="Would you like to enable augmented price floor and ceiling? (Yes/No) >>> ",
+                  type_str="bool",
+                  default=False,
+                  validator=validate_bool),
+    "aug_moving_price_band_enabled":
+        ConfigVar(key="aug_moving_price_band_enabled",
+                  prompt="Would you like to enable augmented moving price floor and ceiling? (Yes/No) >>> ",
+                  type_str="bool",
+                  default=False,
+                  validator=validate_bool),
     "moving_price_band_enabled":
         ConfigVar(key="moving_price_band_enabled",
                   prompt="Would you like to enable moving price floor and ceiling? (Yes/No) >>> ",

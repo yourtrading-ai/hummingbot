@@ -101,6 +101,10 @@ def start(self):
         should_wait_order_cancel_confirmation = c_map.get("should_wait_order_cancel_confirmation")
 
         strategy_logging_options = PureMarketMakingStrategy.OPTION_LOG_ALL
+
+        aug_price_band_enabled = c_map.get("aug_price_band_enabled").value
+        aug_moving_price_band_enabled = c_map.get("aug_moving_price_band_enabled").value
+
         self.strategy = PureMarketMakingStrategy()
         self.strategy.init_params(
             market_info=MarketTradingPairTuple(*maker_data),
@@ -138,7 +142,9 @@ def start(self):
             bid_order_level_spreads=bid_order_level_spreads,
             ask_order_level_spreads=ask_order_level_spreads,
             should_wait_order_cancel_confirmation=should_wait_order_cancel_confirmation,
-            moving_price_band=moving_price_band
+            moving_price_band=moving_price_band,
+            aug_price_band_enabled=aug_price_band_enabled,
+            aug_moving_price_band_enabled=aug_moving_price_band_enabled
         )
     except Exception as e:
         self.notify(str(e))
